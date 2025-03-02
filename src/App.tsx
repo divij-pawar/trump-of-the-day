@@ -4,7 +4,7 @@ import { format, addMonths, subMonths, isSameDay } from 'date-fns';
 import ThemeToggle from './components/ThemeToggle';
 import { useTheme } from './context/ThemeContext';
 import { useNews } from './hooks/useNews';
-
+import { DisplayNoNews } from './hooks/useNews';
 // Calendar component
 const CalendarComponent = ({ 
   selectedDate, 
@@ -183,25 +183,10 @@ const ContentCard = ({ date, link, title, desc, news_source, image_url }: {
   );
 };
 
-// Supabase connection banner
-const SupabaseBanner = ({ isUsingMockData }: { isUsingMockData: boolean }) => {
-  if (!isUsingMockData) return null;
-  
-  return (
-    <div className="bg-blue-100 dark:bg-blue-900 border border-blue-400 dark:border-blue-700 text-blue-700 dark:text-blue-300 px-4 py-3 rounded-lg mb-6">
-      <div className="flex items-start">
-        <Database className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
-        <div>
-          <p className="font-medium">Using sample data</p>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 function App() {
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const { news, loading, error, isUsingMockData } = useNews(selectedDate);
+  const { news, loading, error, noNewArticles } = useNews(selectedDate);
 
   return (
     <div className="min-h-screen bg-background-light dark:bg-background-dark flex flex-col transition-colors duration-200">
@@ -213,8 +198,6 @@ function App() {
       </header>
       
       <main className="flex-grow container mx-auto px-4 py-8">
-        <SupabaseBanner isUsingMockData={isUsingMockData} />
-        
         <div className="flex flex-col md:flex-row gap-8">
           <div className="md:w-1/3">
             <CalendarComponent selectedDate={selectedDate} onDateSelect={setSelectedDate} />
@@ -234,6 +217,8 @@ function App() {
               <div className="bg-yellow-100 dark:bg-yellow-900 border border-yellow-400 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300 px-4 py-3 rounded relative">
                 <p>{error}</p>
               </div>
+            ) : noNewArticles ? (
+              <DisplayNoNews date={selectedDate} />
             ) : (
               <div className="space-y-4">
                 {news.map((item) => (
