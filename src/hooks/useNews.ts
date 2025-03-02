@@ -14,7 +14,6 @@ export const useNews = (selectedDate: Date) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isUsingMockData, setIsUsingMockData] = useState(false);
-console.log("Hello")
   useEffect(() => {
     const fetchNews = async () => {
       setLoading(true);
@@ -34,7 +33,7 @@ console.log("Hello")
 
         // Format the selected date to match our database format (YYYY-MM-DD)
         const formattedDate = format(selectedDate, 'yyyy-MM-dd');
-
+        console.log(formattedDate)
         // Fetch all news items matching the selected date
         const { data, error } = await supabase
           .from('news')
@@ -48,10 +47,10 @@ console.log("Hello")
             throw error;
           }
         }
-        console.log(data)
         if (data && data.length > 0) {
           setNews(data);
         } else {
+          console.log("Using mock data, useNews.ts:54");
           setIsUsingMockData(true);
           setNews(getMockNews(selectedDate));
         }

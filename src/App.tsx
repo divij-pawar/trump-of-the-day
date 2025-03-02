@@ -4,8 +4,6 @@ import { format, addMonths, subMonths, isSameDay } from 'date-fns';
 import ThemeToggle from './components/ThemeToggle';
 import { useTheme } from './context/ThemeContext';
 import { useNews } from './hooks/useNews';
-console.log(import.meta.env.VITE_SUPABASE_URL);
-console.log(import.meta.env.VITE_SUPABASE_ANON_KEY);
 
 // Calendar component
 const CalendarComponent = ({ 
