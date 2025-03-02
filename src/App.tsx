@@ -15,6 +15,10 @@ const CalendarComponent = ({
 }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
+  // Define the minimum and maximum allowed dates
+  const minDate = new Date(2025, 0, 20); // January 20, 2025
+  const maxDate = new Date(); // Current date
+
   const daysInMonth = (date: Date) => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   };
@@ -24,13 +28,33 @@ const CalendarComponent = ({
   };
   
   const prevMonth = () => {
-    setCurrentMonth(subMonths(currentMonth, 1));
+    const newMonth = subMonths(currentMonth, 1);
+    const firstDayOfNewMonth = new Date(newMonth.getFullYear(), newMonth.getMonth(), 1);
+    const firstDayOfMinMonth = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+    
+    // Allow navigation if the new month is after or equal to the min month
+    if (firstDayOfNewMonth >= firstDayOfMinMonth) {
+      setCurrentMonth(newMonth);
+    }
   };
   
   const nextMonth = () => {
-    setCurrentMonth(addMonths(currentMonth, 1));
+    const newMonth = addMonths(currentMonth, 1);
+    const firstDayOfNewMonth = new Date(newMonth.getFullYear(), newMonth.getMonth(), 1);
+    const firstDayOfMaxMonth = new Date(maxDate.getFullYear(), maxDate.getMonth(), 1);
+    
+    // Allow navigation if the new month is before or equal to the max month
+    if (firstDayOfNewMonth <= firstDayOfMaxMonth) {
+      setCurrentMonth(newMonth);
+    }
   };
-  
+
+  // Check if the "Previous" button should be disabled
+  const isPrevDisabled = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1) <= new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+
+  // Check if the "Next" button should be disabled
+  const isNextDisabled = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1) >= new Date(maxDate.getFullYear(), maxDate.getMonth(), 1);
+
   const renderCalendarDays = () => {
     const days = [];
     const totalDays = daysInMonth(currentMonth);
@@ -44,17 +68,20 @@ const CalendarComponent = ({
       const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
       const isToday = isSameDay(new Date(), date);
       const isSelected = isSameDay(selectedDate, date);
+      const isDisabled = date > maxDate || date < minDate; // Disable dates outside the allowed range
       
       days.push(
         <div 
           key={day} 
-          onClick={() => onDateSelect(date)}
+          onClick={() => !isDisabled && onDateSelect(date)}
           className={`h-8 w-8 flex items-center justify-center rounded-full cursor-pointer
-            ${isSelected 
-              ? 'bg-primary-light dark:bg-primary-dark text-white' 
-              : isToday 
-                ? 'border border-primary-light dark:border-primary-dark' 
-                : 'hover:bg-gray-200 dark:hover:bg-gray-600'
+            ${isDisabled 
+              ? 'text-gray-400 dark:text-gray-600 cursor-not-allowed' 
+              : isSelected 
+                ? 'bg-primary-light dark:bg-primary-dark text-white' 
+                : isToday 
+                  ? 'border border-primary-light dark:border-primary-dark' 
+                  : 'hover:bg-gray-200 dark:hover:bg-gray-600'
             }`}
         >
           {day}
@@ -70,7 +97,12 @@ const CalendarComponent = ({
       <div className="flex items-center justify-between mb-4">
         <button 
           onClick={prevMonth}
-          className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors duration-200"
+          disabled={isPrevDisabled}
+          className={`p-2 rounded-full ${
+            isPrevDisabled 
+              ? 'text-gray-400 dark:text-gray-600 cursor-not-allowed' 
+              : 'hover:bg-gray-200 dark:hover:bg-gray-600'
+          } transition-colors duration-200`}
           aria-label="Previous month"
         >
           &lt;
@@ -80,7 +112,12 @@ const CalendarComponent = ({
         </h2>
         <button 
           onClick={nextMonth}
-          className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors duration-200"
+          disabled={isNextDisabled}
+          className={`p-2 rounded-full ${
+            isNextDisabled 
+              ? 'text-gray-400 dark:text-gray-600 cursor-not-allowed' 
+              : 'hover:bg-gray-200 dark:hover:bg-gray-600'
+          } transition-colors duration-200`}
           aria-label="Next month"
         >
           &gt;
