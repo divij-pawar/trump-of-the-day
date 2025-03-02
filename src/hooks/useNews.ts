@@ -9,6 +9,8 @@ export interface NewsItem {
   link: string;
   description:string;
   title:string;
+  news_source:string;
+  image_url:string;
 }
 
 export const useNews = (selectedDate: Date) => {

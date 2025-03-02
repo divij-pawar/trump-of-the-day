@@ -103,16 +103,46 @@ const CalendarComponent = ({
 };
 
 // Card component
-const ContentCard = ({ date, link, title, desc }: { date: string; link: string; title: string; desc: string }) => {
+const ContentCard = ({ date, link, title, desc, news_source, image_url }: { 
+  date: string; 
+  link: string; 
+  title: string; 
+  desc: string; 
+  news_source: string; 
+  image_url: string; 
+}) => {
   return (
-    <div className="bg-card-light dark:bg-card-dark rounded-lg shadow-md p-4 mb-4 transition-colors duration-200">
-      <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-2">
-        <a href={link} target="_blank" rel="noopener noreferrer" className="hover:underline">
-          {title}
-        </a>
-      </h3>
-      <p className="text-gray-600 dark:text-gray-300 mb-3">{desc}</p>
-    </div>
+    <a 
+      href={link} 
+      target="_blank" 
+      rel="noopener noreferrer" 
+      className="block bg-card-light dark:bg-card-dark rounded-lg shadow-md mb-4 transition-colors duration-200 hover:shadow-lg"
+    >
+      <div className="flex flex-col md:flex-row">
+        {/* Left side: Text content */}
+        <div className="flex-1 p-4">
+          <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-2">
+            {title}
+          </h3>
+          <p className="text-gray-600 dark:text-gray-300 mb-3">{desc}</p>
+          <div className="flex justify-between items-center">
+            <p className="text-sm text-gray-500 dark:text-gray-400">{date}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">{news_source}</p>
+          </div>
+        </div>
+
+        {/* Right side: Image */}
+        {image_url && image_url !== 'No Image Available' && (
+          <div className="w-full md:w-1/3 p-4 flex justify-center md:justify-end">
+            <img 
+              src={image_url} 
+              alt={title} 
+              className="w-full md:w-auto h-32 object-cover rounded-lg"
+            />
+          </div>
+        )}
+      </div>
+    </a>
   );
 };
 
@@ -140,7 +170,7 @@ function App() {
     <div className="min-h-screen bg-background-light dark:bg-background-dark flex flex-col transition-colors duration-200">
       <header className="bg-white dark:bg-gray-800 shadow-md py-6 transition-colors duration-200">
         <div className="container mx-auto px-4 flex justify-between items-center">
-          <h1 className="text-4xl font-bold text-center text-gray-800 dark:text-white">Trump of the day</h1>
+          <h1 className="text-4xl font-bold text-center text-gray-800 dark:text-white">Trump of the day!</h1>
           <ThemeToggle />
         </div>
       </header>
@@ -170,7 +200,15 @@ function App() {
             ) : (
               <div className="space-y-4">
                 {news.map((item) => (
-                  <ContentCard key={item.id} date={item.date} link={item.link} desc={item.description} title={item.title}/>
+                  <ContentCard 
+                    key={item.id} 
+                    date={item.date} 
+                    link={item.link} 
+                    desc={item.description} 
+                    title={item.title}
+                    news_source={item.news_source}
+                    image_url={item.image_url}
+                  />
                 ))}
               </div>
             )}
