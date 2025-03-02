@@ -103,13 +103,15 @@ const CalendarComponent = ({
 };
 
 // Card component
-const ContentCard = ({ date, link }: { date: string; link: string }) => {
+const ContentCard = ({ date, link, title, desc }: { date: string; link: string; title: string; desc: string }) => {
   return (
     <div className="bg-card-light dark:bg-card-dark rounded-lg shadow-md p-4 mb-4 transition-colors duration-200">
-      <p className="text-gray-600 dark:text-gray-300 mb-3">News update for {date}</p>
-      <a href={link} className="text-blue-500 hover:underline dark:text-blue-400" target="_blank" rel="noopener noreferrer">
-        Read more
-      </a>
+      <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-2">
+        <a href={link} target="_blank" rel="noopener noreferrer" className="hover:underline">
+          {title}
+        </a>
+      </h3>
+      <p className="text-gray-600 dark:text-gray-300 mb-3">{desc}</p>
     </div>
   );
 };
@@ -168,7 +170,7 @@ function App() {
             ) : (
               <div className="space-y-4">
                 {news.map((item) => (
-                  <ContentCard key={item.id} date={item.date} link={item.link} />
+                  <ContentCard key={item.id} date={item.date} link={item.link} desc={item.description} title={item.title}/>
                 ))}
               </div>
             )}

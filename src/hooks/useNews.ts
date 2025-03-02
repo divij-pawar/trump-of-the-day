@@ -7,6 +7,8 @@ export interface NewsItem {
   id: number;
   date: string;
   link: string;
+  description:string;
+  title:string;
 }
 
 export const useNews = (selectedDate: Date) => {
