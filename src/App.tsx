@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { format} from 'date-fns';
+import { format } from 'date-fns';
 import { useNews } from './hooks/useNews';
 import ThemeToggle from './components/ThemeToggle';
 import { DisplayNoNews } from './hooks/useNews';
@@ -7,14 +7,13 @@ import Footer from './components/Footer';
 import ContentCard from './components/ContentCard';
 import Calendar from './components/Calendar';
 
-// 🦅 **Main App Component**
 function App() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const { news, loading, error, noNewArticles } = useNews(selectedDate);
 
   return (
-    <div className="relative min-h-screen w-full bg-gradient-to-l from-red-600 via-white to-blue-600 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 transition-all overflow-hidden">
-
+    <div className="relative min-h-screen w-full bg-gradient-to-l from-red-600 via-white to-blue-600 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 transition-all overflow-hidden flex flex-col">
+      
       {/* 🌟 Star Overlay for US Flag Effect */}
       <div className="absolute inset-0 w-full h-full bg-stars-pattern opacity-40 animate-waving"></div>
 
@@ -27,7 +26,7 @@ function App() {
       </header>
 
       {/* **Main Content** */}
-      <main className="container mx-auto px-4 py-8 relative">
+      <main className="container mx-auto px-4 py-8 relative flex-grow">
         <div className="flex flex-col md:flex-row gap-8">
           {/* **Left: Calendar** */}
           <div className="md:w-1/3">
@@ -54,7 +53,15 @@ function App() {
             ) : (
               <div className="space-y-4">
                 {news.map((item) => (
-                  <ContentCard key={item.id} date={item.date} link={item.link} desc={item.description} title={item.title} news_source={item.news_source} image_url={item.image_url} />
+                  <ContentCard
+                    key={item.id}
+                    date={item.date}
+                    link={item.link}
+                    title={item.title}
+                    desc={item.description}
+                    news_source={item.news_source}
+                    image_url={item.image_url}
+                  />
                 ))}
               </div>
             )}
