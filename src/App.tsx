@@ -6,6 +6,7 @@ import { DisplayNoNews } from './hooks/useNews';
 import Footer from './components/Footer';
 import ContentCard from './components/ContentCard';
 import Calendar from './components/Calendar';
+import DayNavigation from './components/DayNavigation';
 
 function App() {
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -67,7 +68,12 @@ function App() {
             )}
           </div>
         </div>
+
+        {/* **Day Navigation Buttons** */}
+        <DayNavigation selectedDate={selectedDate} onDateSelect={setSelectedDate} />
       </main>
+
+      {/* **Footer** */}
       <Footer />
     </div>
   );
