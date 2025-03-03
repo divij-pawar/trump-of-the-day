@@ -1,7 +1,7 @@
 // useNews.ts
-import { useState, useEffect } from 'react';
-import { supabase, checkSupabaseConnection } from '../lib/supabase';
-import { format } from 'date-fns';
+import { useState, useEffect } from "react";
+import { supabase, checkSupabaseConnection } from "../lib/supabase";
+import { format } from "date-fns";
 
 export interface NewsItem {
   id: number;
@@ -34,17 +34,19 @@ export const useNews = (selectedDate: Date) => {
           return;
         }
 
-        const formattedDate = format(selectedDate, 'yyyy-MM-dd');
+        const formattedDate = format(selectedDate, "yyyy-MM-dd");
         console.log(formattedDate);
 
         const { data, error } = await supabase
-          .from('news')
-          .select('*')
-          .eq('date', formattedDate);
+          .from("news")
+          .select("*")
+          .eq("date", formattedDate);
 
         if (error) {
-          if (error.code === '42P01') {
-            throw new Error('The news table does not exist in the database. Please run the migration script.');
+          if (error.code === "42P01") {
+            throw new Error(
+              "The news table does not exist in the database. Please run the migration script."
+            );
           } else {
             throw error;
           }
@@ -58,8 +60,8 @@ export const useNews = (selectedDate: Date) => {
           setNews([]);
         }
       } catch (err: any) {
-        console.error('Error fetching news:', err);
-        setError('No news due to database connection issues.');
+        console.error("Error fetching news:", err);
+        setError("No news due to database connection issues.");
         setNoNewArticles(true);
         setNews([]);
       } finally {
@@ -77,9 +79,9 @@ export const useNews = (selectedDate: Date) => {
 export const DisplayNoNews = ({ date }: { date: Date }) => {
   return (
     <div className="text-center text-gray-700 dark:text-gray-300">
-      <h1 className="text-xl font-bold text-center text-gray-800 dark:text-white">No news found for {format(date, 'MMMM d, yyyy')}. . . . . . . . . yet</h1>
-
+      <h1 className="text-xl font-bold text-center text-gray-800 dark:text-white">
+        No news found for {format(date, "MMMM d, yyyy")}. . . . . . . . . yet
+      </h1>
     </div>
-    
   );
 };

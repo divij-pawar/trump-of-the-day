@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
-import { format } from 'date-fns';
-import { useNews } from './hooks/useNews';
-import ThemeToggle from './components/ThemeToggle';
-import { DisplayNoNews } from './hooks/useNews';
-import Footer from './components/Footer';
-import ContentCard from './components/ContentCard';
-import Calendar from './components/Calendar';
-import Metadata from './components/Metadata';
+import React, { useState } from "react";
+import { format } from "date-fns";
+import { useNews } from "./hooks/useNews";
+import ThemeToggle from "./components/ThemeToggle";
+import { DisplayNoNews } from "./hooks/useNews";
+import Footer from "./components/Footer";
+import ContentCard from "./components/ContentCard";
+import Calendar from "./components/Calendar";
+import Metadata from "./components/Metadata";
 
 function App() {
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -15,49 +15,45 @@ function App() {
   return (
     <div className="relative min-h-screen w-full bg-gradient-to-l from-red-600 via-white to-blue-600 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 transition-all overflow-hidden flex flex-col">
       <Metadata
-  title="Trump Of The Day 🦅"
-  description="Your daily dose of news and updates about Trump."
-  image="eagle.webp"
-  url="https://trumpoftheday.com"
-  
-  // SEO enhancements
-  keywords="trump, news, politics, daily updates"
-  author="Trump Of The Day"
-  canonicalUrl="https://trumpoftheday.com"
-  
-  // Open Graph enhancements
-  ogType="website"
-  ogSiteName="Trump Of The Day"
-  ogArticlePublishedTime="2025-03-03T12:00:00Z"
-  ogArticleTags={["trump", "politics", "news"]}
-  
-  // Twitter
-  twitterSite="@trumpoftheday"
-  twitterCreator="@trumpoftheday"
-  
-  // Structured data for rich snippets
-  structuredData={{
-    "@context": "https://schema.org",
-    "@type": "WebSite",
-    "name": "Trump Of The Day 🦅",
-    "description": "Your daily dose of news and updates about Trump.",
-    "url": "https://trumpoftheday.com",
-    "publisher": {
-      "@type": "Organization",
-      "name": "Trump Of The Day",
-      "logo": {
-        "@type": "ImageObject",
-        "url": "eagle.webp"
-      }
-    }
-  }}
-/>
+        title="Trump Of The Day 🦅"
+        description="Your daily dose of news and updates about Trump."
+        image="eagle.webp"
+        url="https://trumpoftheday.com"
+        // SEO enhancements
+        keywords="trump, news, politics, daily updates"
+        author="Trump Of The Day"
+        canonicalUrl="https://trumpoftheday.com"
+        // Open Graph enhancements
+        ogType="website"
+        ogSiteName="Trump Of The Day"
+        ogArticlePublishedTime="2025-03-03T12:00:00Z"
+        ogArticleTags={["trump", "politics", "news"]}
+        // Structured data for rich snippets
+        structuredData={{
+          "@context": "https://schema.org",
+          "@type": "WebSite",
+          name: "Trump Of The Day 🦅",
+          description: "Your daily dose of news and updates about Trump.",
+          url: "https://trumpoftheday.com",
+          publisher: {
+            "@type": "Organization",
+            name: "Trump Of The Day",
+            logo: {
+              "@type": "ImageObject",
+              url: "eagle.webp",
+            },
+          },
+        }}
+      />
       {/* 🌟 Star Overlay for US Flag Effect */}
       <div className="absolute inset-0 w-full h-full bg-stars-pattern opacity-40 animate-waving"></div>
 
       {/* **Header with Eagle & Flag** */}
       <header className="relative py-6 shadow-md flex items-center justify-center bg-opacity-80">
-        <h1 className="trump-title font-extrabold text-white drop-shadow-lg text-center"> Trump Of The Day 🦅</h1>
+        <h1 className="trump-title font-extrabold text-white drop-shadow-lg text-center">
+          {" "}
+          Trump Of The Day 🦅
+        </h1>
         <div className="absolute right-6">
           <ThemeToggle />
         </div>
@@ -68,10 +64,16 @@ function App() {
         <div className="flex flex-col md:flex-row gap-8">
           {/* **Left: Calendar** */}
           <div className="md:w-1/3">
-            <Calendar selectedDate={selectedDate} onDateSelect={setSelectedDate} />
+            <Calendar
+              selectedDate={selectedDate}
+              onDateSelect={setSelectedDate}
+            />
             <div className="mt-4 p-3 bg-white dark:bg-gray-900 rounded-lg shadow-md">
               <p className="text-gray-700 dark:text-gray-300">
-                Selected date: <span className="font-semibold">{format(selectedDate, 'MMMM d, yyyy')}</span>
+                Selected date:{" "}
+                <span className="font-semibold">
+                  {format(selectedDate, "MMMM d, yyyy")}
+                </span>
               </p>
             </div>
           </div>
