@@ -6,14 +6,22 @@ import { DisplayNoNews } from './hooks/useNews';
 import Footer from './components/Footer';
 import ContentCard from './components/ContentCard';
 import Calendar from './components/Calendar';
+import Metadata from './components/Metadata';
 
 function App() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const { news, loading, error, noNewArticles } = useNews(selectedDate);
+    // Metadata values
+    const metadata = {
+      title: 'Trump Of The Day 🦅',
+      description: 'Your daily dose of news and updates about Trump.',
+      image: 'eagle.webp',
+      url: 'https://trumpoftheday.com', 
+    };
 
   return (
     <div className="relative min-h-screen w-full bg-gradient-to-l from-red-600 via-white to-blue-600 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 transition-all overflow-hidden flex flex-col">
-      
+      <Metadata {...metadata} />
       {/* 🌟 Star Overlay for US Flag Effect */}
       <div className="absolute inset-0 w-full h-full bg-stars-pattern opacity-40 animate-waving"></div>
 
