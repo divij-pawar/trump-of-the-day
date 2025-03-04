@@ -20,5 +20,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src", "pages/DisplayAllNews.tsx", "pages/Home.tsx"]
 }
