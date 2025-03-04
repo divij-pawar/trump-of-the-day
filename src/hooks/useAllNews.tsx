@@ -1,4 +1,4 @@
-// useNews.tsx
+// useAllNews.tsx
 import { useState, useEffect } from "react";
 import { supabase, checkSupabaseConnection } from "../lib/supabase";
 import { format } from "date-fns";
@@ -13,7 +13,7 @@ export interface NewsItem {
   image_url: string;
 }
 
-export const useNews = (selectedDate: Date) => {
+export const useAllNews = () => {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,13 +34,9 @@ export const useNews = (selectedDate: Date) => {
           return;
         }
 
-        const formattedDate = format(selectedDate, "yyyy-MM-dd");
-        console.log(formattedDate);
-
         const { data, error } = await supabase
           .from("news")
           .select("*")
-          .eq("date", formattedDate);
 
         if (error) {
           if (error.code === "42P01") {
@@ -70,7 +66,7 @@ export const useNews = (selectedDate: Date) => {
     };
 
     fetchNews();
-  }, [selectedDate]);
+  },[]);
 
   return { news, loading, error, noNewArticles };
 };
