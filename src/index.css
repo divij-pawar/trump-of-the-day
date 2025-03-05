@@ -2,43 +2,39 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Import Chomsky Font */
+/* ✅ Import Chomsky Font */
 @font-face {
   font-family: "Chomsky";
-  src: local("Chomsky"), url("/fonts/Chomsky.woff2") format("woff2"),
-    url("/fonts/Chomsky.otf") format("opentype");
+  src: url("/fonts/Chomsky.otf") format("opentype");
   font-weight: normal;
   font-style: normal;
 }
 
-/* Ensure Full-Screen Background */
-html,
-body {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  background: transparent;
-  overscroll-behavior: none; /* Prevents bouncing white background on mobile */
-  scroll-behavior: smooth;
-}
-
-html {
-  background: linear-gradient(to bottom, #dc2626, white, #2563eb);
-  background-attachment: fixed; /* Prevents white gap while scrolling */
-}
-
-/* Apply Chomsky to Trump of the Day */
+/* ✅ Chomsky Font Styling */
 .trump-title {
   font-family: "Chomsky", serif;
-  font-size: 5rem;
-  text-align: center;
-  letter-spacing: 1px;
-  text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.5);
+  letter-spacing: -0.5px;
+  text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.6);
+
 }
 
-/* Ensure full-page layout */
-#root {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
+
+/* ✨ Light Mode: Subtle Textured White */
+.bg-theme-light {
+  background: linear-gradient(to bottom, #f8f9fa, #e9ecef); /* Light, Elegant */
+  background-size: cover;
+  background-position: center;
+}
+
+/* 🌙 Dark Mode: Soft Gradient with Glow */
+.bg-theme-dark {
+  background: radial-gradient(circle at top, #2c2f36, #1a1c20); /* Dark, Sleek */
+  background-size: cover;
+  background-position: center;
+}
+
+
+/* ✅ Smooth Transition for Theme Switching */
+.transition-bg {
+  transition: background 0.5s ease-in-out;
 }
