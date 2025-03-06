@@ -36,7 +36,7 @@ const ContentCard = ({
             <span>{news_source}</span>
           </div>
         </div>
-        {image_url !== "No Image Available" && (
+        {image_url && image_url !== "No Image Available" && (
           <div className="w-full md:w-1/3 flex justify-center">
             <img
               src={image_url}
