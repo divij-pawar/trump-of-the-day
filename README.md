@@ -1,6 +1,9 @@
-# Trump of the Day Dashboard
+# Trump of the Day🦅
+ <em>What did he do today?</em>
 
-A modern dashboard application that displays daily updates with a calendar interface and dark/light mode support.
+
+<br>
+<a href="https://resilient-soapwort-1d7.notion.site/1ab52d9abebe80fb845eea01a73b12c0?v=1ab52d9abebe816a83e6000c4639b1c3&pvs=4">Notion Project Dashboard </a>
 
 ## Features
 
@@ -44,20 +47,11 @@ The application uses Supabase as its database. To set up the database:
 
 1. Create a `.env` file based on the `.env.example` template
 2. Add your Supabase URL and anonymous key
-3. Run the migration script in the Supabase dashboard SQL editor:
-   - Copy the contents of `supabase/migrations/create_updates_table.sql`
-   - Paste and run in the Supabase SQL editor
-
-## Project Structure
-
-- `src/` - Source code
-  - `components/` - Reusable UI components
-  - `context/` - React context providers
-  - `hooks/` - Custom React hooks
-  - `lib/` - Utility functions and libraries
-  - `types/` - TypeScript type definitions
-- `supabase/` - Supabase configuration and migrations
-- `public/` - Static assets
+```env
+# Supabase connection details
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+```
 
 ## Technologies Used
 
