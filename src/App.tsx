@@ -1,22 +1,25 @@
 import React, { useState } from "react";
 import { format } from "date-fns";
-import { useNews } from "./hooks/useNews";
-import { DisplayNoNews } from "./hooks/useNews";
+import { useNews, DisplayNoNews } from "./hooks/useNews";
 import Footer from "./components/Footer";
 import ContentCard from "./components/ContentCard";
 import Calendar from "./components/Calendar";
 import Metadata from "./components/Metadata";
-import Header from "./components/Header"; // ✅ Import new Header component
-import { useTheme } from "./context/ThemeContext"; // Import ThemeContext
+import Header from "./components/Header";
+import { useTheme } from "./context/ThemeContext";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import Login from "./components/Login";
+import Profile from "./components/Profile";
+import UsersList from "./components/UsersList";
+import Signup from "./components/Signup";
 
-function App() {
+function HomePage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const { news, loading, error, noNewArticles } = useNews(selectedDate);
-  const { theme } = useTheme(); // Get current theme
+  const { theme } = useTheme();
 
   return (
     <div className={`relative min-h-screen w-full ${theme === "dark" ? "bg-theme-dark" : "bg-theme-light"} transition-all overflow-hidden flex flex-col`}>
-      
       <Metadata
         title="Trump Of The Day 🦅"
         description="Your daily dose of news and updates about Trump."
@@ -46,16 +49,12 @@ function App() {
         }}
       />
 
-      {/* ✅ New Header Component */}
       <Header />
 
       <main className="container mx-auto px-4 py-8 relative flex-grow pt-20 md:pt-24 lg:pt-24">
         <div className="flex flex-col md:flex-row gap-8">
           <div className="md:w-1/3">
-            <Calendar
-              selectedDate={selectedDate}
-              onDateSelect={setSelectedDate}
-            />
+            <Calendar selectedDate={selectedDate} onDateSelect={setSelectedDate} />
             <div className="mt-4 p-3 bg-white dark:bg-gray-900 rounded-lg shadow-md">
               <p className="text-gray-700 dark:text-gray-300">
                 Selected date:{" "}
@@ -95,8 +94,24 @@ function App() {
           </div>
         </div>
       </main>
+
       <Footer />
     </div>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <Header /> 
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route path="/users" element={<UsersList />} />
+      </Routes>
+    </Router>
   );
 }
 

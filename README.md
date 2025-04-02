@@ -51,6 +51,7 @@ The application uses Supabase as its database. To set up the database:
 # Supabase connection details
 VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
+VITE_SERVER_URL=
 ```
 
 ## Technologies Used
