@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 
 export default function UsersList() {
   const [users, setUsers] = useState<any[]>([]);
+  // Use the environment variable for server URL
+  const SERVER_URL = import.meta.env.VITE_SERVER_URL;
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/auth/users', {
+    fetch(`${SERVER_URL}/api/auth/users`, {
       credentials: 'include',
     })
       .then(res => res.json())

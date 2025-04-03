@@ -35,7 +35,7 @@ export default function Header() {
                     onClick={() => setOpenDropdown(!openDropdown)}
                     className="flex items-center gap-2 text-gray-700 dark:text-gray-200"
                   >
-                    <img src={user.avatar} alt="avatar" className="w-8 h-8 rounded-full" />
+                    <img src={user.profile_picture} alt="avatar" className="w-8 h-8 rounded-full" />
                     <span>{user.name.split(" ")[0]}</span>
                   </button>
 

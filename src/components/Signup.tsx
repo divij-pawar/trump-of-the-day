@@ -5,6 +5,8 @@ export default function Signup() {
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  // Use the environment variable for server URL
+  const SERVER_URL = import.meta.env.VITE_SERVER_URL;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -14,7 +16,7 @@ export default function Signup() {
     e.preventDefault();
     setError("");
 
-    const res = await fetch("http://localhost:3001/api/auth/signup", {
+    const res = await fetch(`${SERVER_URL}/api/auth/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",

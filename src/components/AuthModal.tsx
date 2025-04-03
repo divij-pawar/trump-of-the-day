@@ -13,6 +13,8 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [error, setError] = useState("");
   const { reload } = useAuth();
   const navigate = useNavigate();
+  // Use the environment variable for server URL
+  const SERVER_URL = import.meta.env.VITE_SERVER_URL;
 
   if (!isOpen) return null;
 
@@ -29,7 +31,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
       ? { email: form.email, password: form.password }
       : { name: form.name, email: form.email, password: form.password };
 
-    const res = await fetch(`http://localhost:3001/api/auth/${endpoint}`, {
+    const res = await fetch(`${SERVER_URL}/api/auth/${endpoint}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -48,7 +50,7 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   };
 
   const handleGoogle = () => {
-    window.location.href = "http://localhost:3001/api/auth/google";
+    window.location.href = `${SERVER_URL}/api/auth/google`;
   };
 
   return (

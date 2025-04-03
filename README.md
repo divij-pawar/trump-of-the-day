@@ -49,9 +49,10 @@ The application uses Supabase as its database. To set up the database:
 2. Add your Supabase URL and anonymous key
 ```env
 # Supabase connection details
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
-VITE_SERVER_URL=
+VITE_SUPABASEURL=
+VITE_SUPABASEANON_KEY=
+VITE_SERVER_URL=http://localhost:3001
+VITE_PORT=3000
 ```
 
 ## Technologies Used

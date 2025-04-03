@@ -7,6 +7,9 @@ export default function Login() {
   const [error, setError] = useState("");
   const navigate = useNavigate();
   const { reload } = useAuth();
+  
+  // Use the environment variable for server URL
+  const SERVER_URL = import.meta.env.VITE_SERVER_URL;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -16,7 +19,7 @@ export default function Login() {
     e.preventDefault();
     setError("");
   
-    const res = await fetch("http://localhost:3001/api/auth/login", {
+    const res = await fetch(`${SERVER_URL}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -33,7 +36,6 @@ export default function Login() {
     }
   };
   
-
   return (
     <>
       <div className="max-w-md mx-auto mt-20">
@@ -48,17 +50,17 @@ export default function Login() {
         <div className="mt-6 text-center">
           <p className="mb-2 text-sm text-gray-500">or continue with</p>
           <button
-            onClick={() => window.location.href = "http://localhost:3001/api/auth/google"}
+            onClick={() => window.location.href = `${SERVER_URL}/api/auth/google`}
             className="bg-red-600 text-white px-4 py-2 rounded"
           >
             Continue with Google
           </button>
-          <button onClick={() => window.location.href = "http://localhost:3001/api/auth/facebook"}
+          <button 
+            onClick={() => window.location.href = `${SERVER_URL}/api/auth/facebook`}
             className="bg-blue-800 text-white px-4 py-2 rounded mt-2"
           >
             Continue with Facebook
           </button>
-
         </div>
       </div>
     </>

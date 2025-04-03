@@ -4,11 +4,13 @@ export default function Profile() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Use the environment variable for server URL
+  const SERVER_URL = import.meta.env.VITE_SERVER_URL;
 
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const res = await fetch("http://localhost:3001/api/auth/user", {
+        const res = await fetch(`${SERVER_URL}/api/auth/user`, {
           credentials: "include",
         });
 
