@@ -2,46 +2,210 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function Signup() {
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "" });
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  
   // Use the environment variable for server URL
   const SERVER_URL = import.meta.env.VITE_SERVER_URL;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
+    // Clear error when user starts typing
+    if (error) setError("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    
+    // Validate password match
+    if (form.password !== form.confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+    
+    // Validate password strength
+    if (form.password.length < 8) {
+      setError("Password must be at least 8 characters long");
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      const res = await fetch(`${SERVER_URL}/api/auth/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          name: form.name,
+          email: form.email,
+          password: form.password
+        }),
+      });
 
-    const res = await fetch(`${SERVER_URL}/api/auth/signup`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify(form),
-    });
+      const data = await res.json();
 
-    const data = await res.json();
-
-    if (!res.ok) {
-      setError(data.error || "Signup failed");
-    } else {
-      navigate("/login");
+      if (!res.ok) {
+        setError(data.error || "Signup failed. Please try again.");
+      } else {
+        navigate("/login", { state: { message: "Account created successfully! Please log in." } });
+      }
+    } catch (err) {
+      setError("Connection error. Please try again later.");
+      console.error("Signup error:", err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  const handleSocialSignup = (provider: string) => {
+    window.location.href = `${SERVER_URL}/api/auth/${provider}`;
+  };
+
   return (
-    <div className="max-w-md mx-auto mt-20">
-      <h1 className="text-2xl font-bold mb-4">Signup</h1>
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <input name="name" placeholder="Name" onChange={handleChange} className="w-full border p-2 rounded" />
-        <input name="email" type="email" placeholder="Email" onChange={handleChange} className="w-full border p-2 rounded" />
-        <input name="password" type="password" placeholder="Password" onChange={handleChange} className="w-full border p-2 rounded" />
-        <button className="bg-blue-600 text-white px-4 py-2 rounded" type="submit">Signup</button>
-      </form>
-      {error && <p className="text-red-600 mt-2">{error}</p>}
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="w-full max-w-md space-y-8">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900">Create your account</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            Already have an account?{" "}
+            <a href="/login" className="font-medium text-blue-600 hover:text-blue-500">
+              Sign in
+            </a>
+          </p>
+        </div>
+
+        {error && (
+          <div className="rounded-md bg-red-50 p-4">
+            <div className="flex">
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">Error</h3>
+                <div className="mt-2 text-sm text-red-700">{error}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="mt-8 space-y-6">
+          <div className="space-y-4 rounded-md shadow-sm">
+            <div>
+              <label htmlFor="name" className="sr-only">
+                Full Name
+              </label>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                autoComplete="name"
+                required
+                value={form.name}
+                onChange={handleChange}
+                className="relative block w-full rounded-md border-0 p-2 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:z-10 focus:ring-2 focus:ring-inset focus:ring-blue-600"
+                placeholder="Full Name"
+              />
+            </div>
+            <div>
+              <label htmlFor="email" className="sr-only">
+                Email address
+              </label>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={form.email}
+                onChange={handleChange}
+                className="relative block w-full rounded-md border-0 p-2 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:z-10 focus:ring-2 focus:ring-inset focus:ring-blue-600"
+                placeholder="Email address"
+              />
+            </div>
+            <div>
+              <label htmlFor="password" className="sr-only">
+                Password
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="new-password"
+                required
+                value={form.password}
+                onChange={handleChange}
+                className="relative block w-full rounded-md border-0 p-2 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:z-10 focus:ring-2 focus:ring-inset focus:ring-blue-600"
+                placeholder="Password"
+              />
+            </div>
+            <div>
+              <label htmlFor="confirmPassword" className="sr-only">
+                Confirm Password
+              </label>
+              <input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                autoComplete="new-password"
+                required
+                value={form.confirmPassword}
+                onChange={handleChange}
+                className="relative block w-full rounded-md border-0 p-2 text-gray-900 ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:z-10 focus:ring-2 focus:ring-inset focus:ring-blue-600"
+                placeholder="Confirm Password"
+              />
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs text-gray-500 mb-4">
+              By creating an account, you agree to our{" "}
+              <a href="/terms" className="font-medium text-blue-600 hover:text-blue-500">
+                Terms of Service
+              </a>{" "}
+              and{" "}
+              <a href="/privacy" className="font-medium text-blue-600 hover:text-blue-500">
+                Privacy Policy
+              </a>
+              .
+            </p>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="group relative flex w-full justify-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:bg-blue-400"
+            >
+              {isLoading ? "Creating account..." : "Create account"}
+            </button>
+          </div>
+        </form>
+
+        <div className="mt-6">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-300" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="bg-gray-50 px-2 text-gray-500">Or continue with</span>
+            </div>
+          </div>
+
+          <div className="mt-6 grid grid-cols-2 gap-3">
+            <button
+              onClick={() => handleSocialSignup("google")}
+              className="inline-flex w-full justify-center rounded-md bg-white px-4 py-2 text-gray-500 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:outline-offset-0"
+            >
+              <span className="text-sm font-semibold">Google</span>
+            </button>
+
+            <button
+              onClick={() => handleSocialSignup("facebook")}
+              className="inline-flex w-full justify-center rounded-md bg-white px-4 py-2 text-gray-500 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:outline-offset-0"
+            >
+              <span className="text-sm font-semibold">Facebook</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
