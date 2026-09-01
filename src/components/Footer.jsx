@@ -20,7 +20,7 @@ const Footer = () => {
 
         {/* 🛠️ Made With Love */}
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-          Crafted with <span className="text-red-500 dark:text-yellow-400">❤️</span> using React & Tailwind CSS.
+          Crafted with <span className="text-red-500 dark:text-yellow-400">❤️</span> using React, TypeScript, Tailwind CSS & Neon.
         </p>
 
         {/* ⚖️ Copyright & Info */}

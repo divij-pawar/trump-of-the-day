@@ -6,13 +6,13 @@ import Footer from "./components/Footer";
 import ContentCard from "./components/ContentCard";
 import Calendar from "./components/Calendar";
 import Metadata from "./components/Metadata";
-import Header from "./components/Header"; // ✅ Import new Header component
-import { useTheme } from "./context/ThemeContext"; // Import ThemeContext
+import Header from "./components/Header";
+import { useTheme } from "./context/ThemeContext";
 
 function App() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const { news, loading, error, noNewArticles } = useNews(selectedDate);
-  const { theme } = useTheme(); // Get current theme
+  const { theme } = useTheme();
 
   return (
     <div className={`relative min-h-screen w-full ${theme === "dark" ? "bg-theme-dark" : "bg-theme-light"} transition-all overflow-hidden flex flex-col`}>
@@ -46,7 +46,6 @@ function App() {
         }}
       />
 
-      {/* ✅ New Header Component */}
       <Header />
 
       <main className="container mx-auto px-4 py-8 relative flex-grow pt-20 md:pt-24 lg:pt-24">

@@ -11,7 +11,7 @@
 - Dynamic updates based on selected date
 - Dark mode and light mode with system preference detection
 - Responsive design for mobile and desktop
-- Supabase integration for data storage
+- Neon (serverless Postgres) integration for data storage
 
 ## Getting Started
 

@@ -2,7 +2,7 @@ import { neon } from "@neondatabase/serverless";
 
 const neonUrl = import.meta.env.VITE_NEON_NEWS_URL;
 
-// Read-only connection scoped to the `news` table (role: frontend-noauth).
+// Read-only connection scoped to the `news` table (role: news_readonly).
 export const sql = neon(neonUrl);
 
 export const checkNeonConnection = async (): Promise<boolean> => {
