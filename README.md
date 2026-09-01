@@ -29,11 +29,10 @@
 npm install
 ```
 
-3. Set up Supabase:
-   - Create a Supabase account at [supabase.com](https://supabase.com)
-   - Create a new project
-   - Click the "Connect to Supabase" button in the application
-   - Run the migration script to create the necessary tables
+3. Set up Neon:
+   - Create a Neon project at [neon.tech](https://neon.tech)
+   - Create the read-only role via **plain SQL** (an SQL client, not the Neon Console/API/CLI) — see `db/schema.sql` in the server repo. Console/API/CLI-created roles are automatically added to `neon_superuser`, which grants far more than read access and can't be scoped down afterward.
+   - Add that role's connection string to `.env` as shown below
 
 4. Start the development server:
 
@@ -43,14 +42,13 @@ npm run dev
 
 ## Database Setup
 
-The application uses Supabase as its database. To set up the database:
+The application uses Neon (serverless Postgres) as its database, queried directly from the browser via a read-only role. To set up the database:
 
-1. Create a `.env` file based on the `.env.example` template
-2. Add your Supabase URL and anonymous key
+1. Create a `.env` file at the repo root
+2. Add the read-only role's Neon connection string
 ```env
-# Supabase connection details
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
+# Neon connection details (read-only role, SELECT on `news` only)
+VITE_NEON_NEWS_URL=
 ```
 
 ## Technologies Used
@@ -58,7 +56,7 @@ VITE_SUPABASE_ANON_KEY=
 - React
 - TypeScript
 - Tailwind CSS
-- Supabase
+- Neon (serverless Postgres)
 - date-fns
 - Lucide React (for icons)
 

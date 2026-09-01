@@ -1,6 +1,6 @@
 // useAllNews.tsx
 import { useState, useEffect } from "react";
-import { supabase, checkSupabaseConnection } from "../lib/supabase";
+import { sql, checkNeonConnection } from "../lib/neon";
 import { format } from "date-fns";
 
 export interface NewsItem {
@@ -26,7 +26,7 @@ export const useAllNews = () => {
       setNoNewArticles(false);
 
       try {
-        const isConnected = await checkSupabaseConnection();
+        const isConnected = await checkNeonConnection();
 
         if (!isConnected) {
           setNoNewArticles(true);
@@ -34,19 +34,7 @@ export const useAllNews = () => {
           return;
         }
 
-        const { data, error } = await supabase
-          .from("news")
-          .select("*")
-
-        if (error) {
-          if (error.code === "42P01") {
-            throw new Error(
-              "The news table does not exist in the database. Please run the migration script."
-            );
-          } else {
-            throw error;
-          }
-        }
+        const data = (await sql`SELECT id, date::text as date, title, description, link, news_source, image_url FROM news`) as NewsItem[];
 
         if (data && data.length > 0) {
           setNews(data);
