@@ -82,16 +82,17 @@ The per-IP rate limit needs the visitor's real address. Requests reach the conta
    terraform init -backend-config=backend.hcl
    terraform apply
    ```
-5. **Secrets.** Add the real values; they become the `latest` version.
+5. **Database.** Bring Neon up to the current schema before anything reads it: run `db/migrations/002_dedupe_vector_digest.sql` from the pipeline repo with the owner connection string (take a Neon branch first; it deletes duplicate links), then `python insert_news.py rescore`, `backfill-embeddings` (if you have a Voyage key) and `enrich <start> <end>` for briefs on past days. See the pipeline's [docs/db.md](../trump-of-the-day-server/docs/db.md). Rotate the `news_readonly` password if it was ever in the old frontend bundle (`VITE_NEON_NEWS_URL`).
+6. **Secrets.** Add the real values; they become the `latest` version.
    ```bash
    printf '%s' 'postgresql://news_readonly:…@ep-…-pooler.….neon.tech/neondb?sslmode=require' \
      | gcloud secrets versions add trump-of-the-day-api-database-url --data-file=-
    printf '%s' 'pa-…' | gcloud secrets versions add trump-of-the-day-api-voyage-api-key --data-file=-
    ```
    Leave the Voyage one as is if you don't want search; the API treats the placeholder as "not configured". Don't add `DATABASE_URL_DIRECT`. Without it, Neon can sleep and live updates are off.
-6. **GitHub variables.** Set `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT`, `GCP_IMAGE_REPOSITORY` and `FIREBASE_SITE_ID` from `terraform output`. Then run **Deploy (GCP)**, or push to `main`.
-7. **Pipeline secrets.** In the pipeline repo, add `DATABASE_URL`, `OPENROUTER_API_KEY` (free daily brief) and `VOYAGE_API_KEY`.
-8. **Custom domain (optional).** Add it in the Firebase console under Hosting → Add custom domain. Firebase issues the certificate.
+7. **GitHub variables.** Set `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT`, `GCP_IMAGE_REPOSITORY` and `FIREBASE_SITE_ID` from `terraform output`. Then run **Deploy (GCP)**, or push to `main`.
+8. **Pipeline secrets.** In the pipeline repo (Settings → Secrets and variables → Actions), add `DATABASE_URL` (owner role), `OPENROUTER_API_KEY` (free daily brief) and optionally `VOYAGE_API_KEY`. Push the pipeline repo before this one, since this repo's submodule pointer must exist there for CI to check it out.
+9. **Custom domain (optional).** Add it in the Firebase console under Hosting → Add custom domain. Firebase issues the certificate.
 
 `firebase.json` hard-codes the Cloud Run service name and region. If you change `service_name` or `region` in Terraform, change them there too.
 

@@ -62,6 +62,7 @@ All notable changes to the site, API and infrastructure. The pipeline keeps its 
 - The package was renamed from `vite-react-typescript-starter` to `trump-of-the-day`.
 - `typescript-eslint` was upgraded to `^8.46` (the old version crashed on the installed ESLint).
 - README: the daily brief is described as written by a free OpenRouter model, with the model credited on the card. The diagram now shows the pipeline's outside services. New sections cover the brief's settings and the load-test results.
+- Docs: README, ARCHITECTURE.md, architecture, costs and infrastructure describe the cited brief and the retry policy; the first-deploy steps now include migrating Neon and the order to push the two repos; development.md covers running the real pipeline against the local database and a troubleshooting table for the issues hit during local testing.
 
 ### Fixed
 - The calendar computed the last navigable month as `new Date(year, month, 31)`, which rolled over into the next month for 30-day months and February.

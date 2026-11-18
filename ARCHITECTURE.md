@@ -48,7 +48,7 @@ flowchart LR
 | **API (Cloud Run)** | A small server that answers "what's the news for this day?" and shuts itself off when nobody is asking. |
 | **Neon Postgres** | The database: every article, each day's summary, and the vectors that power search. |
 | **News pipeline** | Runs once a day on GitHub's computers: scrapes, ranks, summarizes and saves. |
-| **OpenRouter Free Router** | Picks a free AI model to write the day's summary. The site shows which model wrote it. |
+| **OpenRouter Free Router** | Picks a free AI model to write the day's summary, with each sentence citing its stories. The site shows which model wrote it. |
 | **Voyage AI** | Turns each headline into numbers that capture its meaning, so search can match on meaning rather than exact words. |
 
 ---
@@ -64,14 +64,14 @@ flowchart TD
     save["💾 Save new stories to the database"]
     embed["🧭 Turn stories into search vectors<br/>(Voyage AI)"]
     summarize["🤖 Send the top 40 headlines to<br/>OpenRouter's Free Router"]
-    pick["🎲 The router picks an available free model,<br/>which writes the summary"]
-    store["📝 Save the summary and<br/>the name of the model that wrote it"]
+    pick["🎲 The router picks an available free model,<br/>which writes the summary, citing stories per sentence<br/>(up to 3 tries if a model runs out of tokens)"]
+    store["📝 Save the summary, its citations and<br/>the name of the model that wrote it"]
     done(["✅ Done until tomorrow"])
 
     start --> fetch --> clean --> rank --> save --> embed --> summarize --> pick --> store --> done
 ```
 
-If the AI step fails, the day still gets its news list, just without a summary.
+If the AI step fails, the day still gets its news list, just without a summary. Tomorrow's run re-processes today and tries again.
 
 ---
 
@@ -97,7 +97,7 @@ sequenceDiagram
         A-->>F: Answer (keep for 1–5 min)
         F-->>V: Answer
     end
-    Note over V: Shows the summary card<br/>"Summarized by ‹model› (free model via OpenRouter)"<br/>followed by the ranked stories
+    Note over V: Shows the summary card, each sentence with<br/>numbered links [1] [2] to the stories it cites,<br/>"Summarized by ‹model› (free model via OpenRouter)",<br/>then the ranked stories
 ```
 
 ---

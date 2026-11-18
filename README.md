@@ -49,7 +49,9 @@ The browser never talks to the database. Earlier versions queried Neon directly 
 
 ### The daily brief
 
-Each day the pipeline sends the top 40 headlines to OpenRouter's [Free Router](https://openrouter.ai/docs/guides/routing/routers/free-router) (`openrouter/free`), which picks an available free model that supports structured output. The pipeline saves the name of the model that actually answered next to the summary, and the site shows it on the card. If the brief can't be written, the day still gets its ranked story list.
+Each day the pipeline sends the top 40 headlines to OpenRouter's [Free Router](https://openrouter.ai/docs/guides/routing/routers/free-router) (`openrouter/free`), which picks an available free model that supports structured output. The model writes the brief sentence by sentence and cites, for each sentence, the stories it's based on. On the site those citations are numbered links ([1], [2]…) that jump to the story cards below, and each cited card is marked "Cited in brief [n]". The pipeline saves the name of the model that actually answered next to the summary, and the site shows it on the card.
+
+Some free models think until they run out of tokens and never answer, so the pipeline caps their reasoning and makes up to three attempts, each re-routed to a possibly different model. If all fail, the day still gets its ranked story list, and the next day's run (which re-processes yesterday) tries again.
 
 | Setting (pipeline) | Effect |
 |---|---|
@@ -75,12 +77,12 @@ Measured with k6 against the API backed by a stub database (10 connections, 15 m
 ```bash
 git clone --recurse-submodules git@github.com:divij-pawar/trump-of-the-day.git
 cd trump-of-the-day
-docker compose up --build     # Postgres + pgvector (seeded), Redis, API on :8080
-npm install
+docker compose up -d --build  # Postgres + pgvector (seeded, ~80 s first time), Redis, API on :8080
+npm ci
 npm run dev                   # frontend on :5173, proxies /api and /ws to :8080
 ```
 
-Prerequisites: Node.js 22+, Docker. See [docs/development.md](docs/development.md) for running against a real Neon database, running the pipeline, and running the tests.
+Prerequisites: Node.js 22+, Docker (with the daemon running: `sudo systemctl start docker` on Linux). See [docs/development.md](docs/development.md) for running the real pipeline against the local database, using a real Neon database, the tests, and troubleshooting (for example "Can't reach the API").
 
 ## Documentation
 

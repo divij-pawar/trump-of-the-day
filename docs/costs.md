@@ -14,7 +14,7 @@ Estimates as of 2026-11. Free tiers and prices change, so check each provider's 
 | Images | Artifact Registry | API images | 0.5 GB | 5 images × ~60 MB, kept there by the cleanup policy | $0 |
 | Monitoring | Cloud Monitoring / Logging | Uptime check, alert, logs | Basic uptime checks; 50 GB logs/month | | $0 |
 | CI/CD and daily scraper | GitHub Actions | Tests, deploys, 14:00 UTC cron | Free for public repos; 2,000 min/month for private ones | ~5 min/day plus CI | $0 |
-| Daily brief | OpenRouter Free Router (`openrouter/free`) | One request per day; the site shows which free model wrote it | Free models are rate-limited per day; 1 request fits easily | | $0 |
+| Daily brief | OpenRouter Free Router (`openrouter/free`) | One to three requests per brief (retries when a model runs out of tokens); the site shows which free model wrote it | Free models are rate-limited per day (about 50 requests without credits); a daily job needs at most 6 (yesterday and today) | | $0 |
 | Embeddings | Voyage `voyage-3.5` | Search and related coverage | Large free token allowance for new accounts | ~1M tokens/month (~$0.06 if paid) | ~$0 |
 | Domain | Firebase `*.web.app` | | | | $0 (a custom domain is ~$10–12/year) |
 
@@ -37,7 +37,7 @@ If you want it running longer, `api_min_tasks = 1`, Fargate Spot, turning off Co
 
 ## Daily-brief options
 
-One request per day: about 5.5k tokens in, about 2k out.
+Per brief: about 5.5k tokens in and up to 8k out (the answer plus capped reasoning), with up to three attempts on OpenRouter. The daily job writes two briefs (yesterday and today).
 
 | Provider (`DIGEST_PROVIDER`) | Model | ~$/month | Notes |
 |---|---|---|---|
