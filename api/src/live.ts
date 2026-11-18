@@ -1,0 +1,86 @@
+import pg from "pg";
+import type { FastifyBaseLogger } from "fastify";
+
+/** Postgres channel the pipeline NOTIFYs after inserting a day's rows (payload: "YYYY-MM-DD"). */
+export const NEWS_CHANNEL = "news_updated";
+
+export type NewsUpdatedHandler = (date: string) => void | Promise<void>;
+
+/**
+ * Holds one dedicated (non-pooled) connection that LISTENs for pipeline updates,
+ * reconnecting with backoff if it drops. Every API replica runs its own listener,
+ * so each one invalidates its cache keys and pushes to its own WebSocket clients
+ * without needing a separate fan-out channel.
+ */
+export class NewsListener {
+  private client: pg.Client | null = null;
+  private stopped = false;
+  private retryDelayMs = 1_000;
+  private retryTimer: NodeJS.Timeout | null = null;
+
+  constructor(
+    private readonly connectionString: string,
+    private readonly onUpdate: NewsUpdatedHandler,
+    private readonly log: FastifyBaseLogger,
+  ) {}
+
+  get connected(): boolean {
+    return this.client !== null;
+  }
+
+  async start(): Promise<void> {
+    this.stopped = false;
+    await this.connect();
+  }
+
+  private async connect(): Promise<void> {
+    if (this.stopped) return;
+    const client = new pg.Client({ connectionString: this.connectionString });
+    client.on("notification", (msg) => {
+      if (msg.channel !== NEWS_CHANNEL || !msg.payload) return;
+      Promise.resolve(this.onUpdate(msg.payload)).catch((err) =>
+        this.log.error({ err }, "news update handler failed"),
+      );
+    });
+    client.on("error", (err) => {
+      this.log.warn({ err }, "LISTEN connection error");
+      this.scheduleReconnect(client);
+    });
+    client.on("end", () => this.scheduleReconnect(client));
+
+    try {
+      await client.connect();
+      await client.query(`LISTEN ${NEWS_CHANNEL}`);
+      this.client = client;
+      this.retryDelayMs = 1_000;
+      this.log.info("listening for news updates");
+    } catch (err) {
+      this.log.warn({ err }, "LISTEN connection failed");
+      this.scheduleReconnect(client);
+    }
+  }
+
+  private scheduleReconnect(client: pg.Client): void {
+    if (this.client === client) this.client = null;
+    client.removeAllListeners();
+    client.end().catch(() => {});
+    if (this.stopped || this.retryTimer) return;
+    const delay = this.retryDelayMs;
+    this.retryDelayMs = Math.min(this.retryDelayMs * 2, 60_000);
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      void this.connect();
+    }, delay);
+  }
+
+  async stop(): Promise<void> {
+    this.stopped = true;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    const client = this.client;
+    this.client = null;
+    if (client) {
+      client.removeAllListeners();
+      await client.end().catch(() => {});
+    }
+  }
+}

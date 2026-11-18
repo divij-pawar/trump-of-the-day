@@ -1,95 +1,105 @@
-import React, { useState } from "react";
-import { format } from "date-fns";
-import { useNews } from "./hooks/useNews";
-import { DisplayNoNews } from "./hooks/useNews";
+import { useCallback, useMemo, useState } from "react";
 import Footer from "./components/Footer";
 import ContentCard from "./components/ContentCard";
 import Calendar from "./components/Calendar";
+import DigestCard from "./components/DigestCard";
 import Metadata from "./components/Metadata";
 import Header from "./components/Header";
+import SearchBox from "./components/SearchBox";
+import { EmptyState, ErrorState, LoadingState } from "./components/NewsStates";
 import { useTheme } from "./context/ThemeContext";
+import { useLatestDate } from "./hooks/useLatestDate";
+import { useLiveUpdates } from "./hooks/useLiveUpdates";
+import { useNews } from "./hooks/useNews";
+import type { Digest, NewsItem } from "./lib/api";
+import { numberCitations } from "./lib/citations";
+import { clampDate, FIRST_DAY, formatLong, isValidISODate, todayUTC, type ISODate } from "./lib/dates";
 
-function App() {
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const { news, loading, error, noNewArticles } = useNews(selectedDate);
-  const { theme } = useTheme();
+/** The brief and the day's stories, with the brief's citations numbered and linked to the cards. */
+function DayStories({ digest, items }: { digest: Digest | null; items: NewsItem[] }) {
+  const storiesById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
+  const citations = useMemo(
+    () => (digest ? numberCitations(digest, new Set(storiesById.keys())) : new Map<number, number>()),
+    [digest, storiesById],
+  );
 
   return (
-    <div className={`relative min-h-screen w-full ${theme === "dark" ? "bg-theme-dark" : "bg-theme-light"} transition-all overflow-hidden flex flex-col`}>
-      
+    <div className="space-y-4">
+      {digest && <DigestCard digest={digest} citations={citations} storiesById={storiesById} />}
+      {items.map((item) => (
+        <ContentCard
+          key={item.id}
+          item={item}
+          highlighted={digest?.top_story_ids.includes(item.id)}
+          citation={citations.get(item.id)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function App() {
+  const { theme } = useTheme();
+  const today = todayUTC();
+  const [latestDate, setLatestDate] = useLatestDate();
+  const [pickedDate, setPickedDate] = useState<ISODate | null>(null);
+  // Until the visitor picks a day, follow the newest day that has stories.
+  const selectedDate = pickedDate ?? latestDate;
+  const { state, reload } = useNews(selectedDate);
+
+  useLiveUpdates(
+    useCallback(
+      (date: ISODate) => {
+        if (latestDate && date > latestDate) setLatestDate(date);
+        if (date === selectedDate) reload();
+      },
+      [latestDate, selectedDate, setLatestDate, reload],
+    ),
+  );
+
+  const pickDate = (date: string) => {
+    if (isValidISODate(date)) setPickedDate(clampDate(date, FIRST_DAY, today));
+  };
+
+  return (
+    <div
+      className={`relative flex min-h-screen w-full flex-col overflow-x-hidden transition-all ${
+        theme === "dark" ? "bg-theme-dark" : "bg-theme-light"
+      }`}
+    >
       <Metadata
         title="Trump Of The Day 🦅"
         description="Your daily dose of news and updates about Trump."
-        image="eagle.webp"
-        url="https://trumpoftheday.com"
-        keywords="trump, news, politics, daily updates"
-        author="Trump Of The Day"
-        canonicalUrl="https://trumpoftheday.com"
-        ogType="website"
-        ogSiteName="Trump Of The Day"
-        ogArticlePublishedTime="2025-03-03T12:00:00Z"
-        ogArticleTags={["trump", "politics", "news"]}
-        structuredData={{
-          "@context": "https://schema.org",
-          "@type": "WebSite",
-          name: "Trump Of The Day 🦅",
-          description: "Your daily dose of news and updates about Trump.",
-          url: "https://trumpoftheday.com",
-          publisher: {
-            "@type": "Organization",
-            name: "Trump Of The Day",
-            logo: {
-              "@type": "ImageObject",
-              url: "eagle.webp",
-            },
-          },
-        }}
+        imagePath="/eagle.webp"
       />
 
       <Header />
 
-      <main className="container mx-auto px-4 py-8 relative flex-grow pt-20 md:pt-24 lg:pt-24">
-        <div className="flex flex-col md:flex-row gap-8">
-          <div className="md:w-1/3">
-            <Calendar
-              selectedDate={selectedDate}
-              onDateSelect={setSelectedDate}
-            />
-            <div className="mt-4 p-3 bg-white dark:bg-gray-900 rounded-lg shadow-md">
-              <p className="text-gray-700 dark:text-gray-300">
-                Selected date:{" "}
-                <span className="font-semibold">
-                  {format(selectedDate, "MMMM d, yyyy")}
-                </span>
-              </p>
-            </div>
+      <main className="container relative mx-auto flex-grow px-4 py-8 pt-20 md:pt-24">
+        <div className="flex flex-col gap-8 md:flex-row">
+          <div className="space-y-4 md:w-1/3">
+            {selectedDate && (
+              <>
+                <Calendar selectedDate={selectedDate} onDateSelect={pickDate} maxDate={today} today={today} />
+                <div className="rounded-lg bg-white p-3 shadow-md dark:bg-gray-900">
+                  <p className="text-gray-700 dark:text-gray-300">
+                    Selected date: <span className="font-semibold">{formatLong(selectedDate)}</span>
+                  </p>
+                </div>
+              </>
+            )}
+            <SearchBox onPickDate={pickDate} />
           </div>
 
-          <div className="md:w-2/3">
-            {loading ? (
-              <div className="flex justify-center p-8">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-600"></div>
-              </div>
-            ) : error ? (
-              <div className="bg-red-100 dark:bg-red-900 border border-red-400 text-red-700 px-4 py-3 rounded">
-                <p>{error}</p>
-              </div>
-            ) : noNewArticles ? (
-              <DisplayNoNews date={selectedDate} />
+          <div className="md:w-2/3" aria-live="polite" aria-busy={state.status === "loading"}>
+            {!selectedDate || state.status === "loading" ? (
+              <LoadingState />
+            ) : state.status === "error" ? (
+              <ErrorState message={state.message} onRetry={reload} />
+            ) : state.status === "empty" ? (
+              <EmptyState date={selectedDate} isToday={selectedDate === today} />
             ) : (
-              <div className="space-y-4">
-                {news.map((item) => (
-                  <ContentCard
-                    key={item.id}
-                    date={item.date}
-                    link={item.link}
-                    title={item.title}
-                    desc={item.description}
-                    news_source={item.news_source}
-                    image_url={item.image_url}
-                  />
-                ))}
-              </div>
+              <DayStories digest={state.digest} items={state.items} />
             )}
           </div>
         </div>

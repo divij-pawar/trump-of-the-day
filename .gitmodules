@@ -1,0 +1,3 @@
+[submodule "trump-of-the-day-server"]
+	path = trump-of-the-day-server
+	url = git@github.com:harshaldafade/trump-of-the-day-server.git

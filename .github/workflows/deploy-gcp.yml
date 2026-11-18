@@ -1,0 +1,85 @@
+# Deploys the live site after CI passes on main: the API image to Cloud Run and
+# the frontend to Firebase Hosting (which routes /api/* to Cloud Run, see
+# firebase.json).
+#
+# Authenticates with Workload Identity Federation (no service account keys).
+# Inert until these repository variables are set from `terraform output` in infra/gcp:
+#   GCP_PROJECT_ID, GCP_REGION, GCP_WORKLOAD_IDENTITY_PROVIDER,
+#   GCP_DEPLOY_SERVICE_ACCOUNT, GCP_IMAGE_REPOSITORY, FIREBASE_SITE_ID
+name: Deploy (GCP)
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-gcp
+  cancel-in-progress: false
+
+env:
+  SERVICE: trump-of-the-day-api
+
+jobs:
+  deploy:
+    if: >-
+      vars.GCP_PROJECT_ID != '' &&
+      (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build and push the API image
+        id: image
+        env:
+          REPO: ${{ vars.GCP_IMAGE_REPOSITORY }}
+          TAG: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+          docker build -t "$REPO/api:$TAG" api
+          docker push "$REPO/api:$TAG"
+          echo "uri=$REPO/api:$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Roll out the new revision
+        run: |
+          gcloud run services update "$SERVICE" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ vars.GCP_REGION }}" \
+            --image "${{ steps.image.outputs.uri }}" \
+            --quiet
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Build the frontend
+        # No WebSockets on GCP: Firebase Hosting can't proxy them and the API runs
+        # without the LISTEN connection there.
+        env:
+          VITE_LIVE_UPDATES: "false"
+        run: npm ci && npm run build
+
+      - name: Deploy to Firebase Hosting
+        env:
+          SITE: ${{ vars.FIREBASE_SITE_ID }}
+        run: |
+          jq '.hosting.site = env.SITE' firebase.json > firebase.deploy.json
+          mv firebase.deploy.json firebase.json
+          npx --yes firebase-tools@13 deploy --only hosting \
+            --project "${{ vars.GCP_PROJECT_ID }}" --non-interactive

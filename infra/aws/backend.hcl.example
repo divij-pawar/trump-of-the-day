@@ -1,0 +1,7 @@
+# Copy to backend.hcl (gitignored) and fill in. The bucket must already exist,
+# with versioning enabled; it's the one resource not managed by this config.
+bucket       = "my-terraform-state-bucket"
+key          = "trump-of-the-day/terraform.tfstate"
+region       = "us-east-1"
+encrypt      = true
+use_lockfile = true

@@ -1,0 +1,6 @@
+# Copy to backend.hcl (gitignored) and fill in. Create the bucket first, with
+# versioning on; it's the one resource not managed by this config:
+#   gcloud storage buckets create gs://my-tf-state-bucket --location=us-central1 \
+#     --uniform-bucket-level-access && gcloud storage buckets update gs://my-tf-state-bucket --versioning
+bucket = "my-tf-state-bucket"
+prefix = "trump-of-the-day"

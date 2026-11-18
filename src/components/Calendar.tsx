@@ -1,122 +1,134 @@
-import { format, addMonths, subMonths, isSameDay } from "date-fns";
-import React, { useState, useEffect } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
+import {
+  addDays,
+  addMonths,
+  compareMonths,
+  daysInMonth,
+  FIRST_DAY,
+  firstWeekday,
+  formatLong,
+  formatMonth,
+  isoFromParts,
+  monthOf,
+  type ISODate,
+} from "../lib/dates";
 
-// 🎆 **Calendar Component**
-const Calendar = ({
-  selectedDate,
-  onDateSelect,
-}: {
-  selectedDate: Date;
-  onDateSelect: (date: Date) => void;
-}) => {
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
-  // **Minimum & Maximum Allowed Dates**
-  const minDate = new Date(2025, 0, 20); // ✅ January 20, 2025
-  const minMonth = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
-  const maxDate = new Date(); // ✅ Today
-  const maxMonth = new Date(maxDate.getFullYear(), maxDate.getMonth(), 31);
+interface CalendarProps {
+  selectedDate: ISODate;
+  onDateSelect: (date: ISODate) => void;
+  minDate?: ISODate;
+  maxDate: ISODate;
+  /** Today in the pipeline's (UTC) calendar; outlined. */
+  today: ISODate;
+}
 
-  // Special date to highlight with a star
-  const specialDate = new Date(2025, 0, 20); // January 20, 2025
+const Calendar = ({ selectedDate, onDateSelect, minDate = FIRST_DAY, maxDate, today }: CalendarProps) => {
+  const [view, setView] = useState(() => monthOf(selectedDate));
 
-  // ✅ **Ensure calendar starts on selected date**
+  // Follow the selection when it moves to another month (initial load, live update, keyboard).
   useEffect(() => {
-    setCurrentMonth(selectedDate);
+    setView(monthOf(selectedDate));
   }, [selectedDate]);
 
-  const daysInMonth = (date: Date) =>
-    new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-  const firstDayOfMonth = (date: Date) =>
-    new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+  const minMonth = monthOf(minDate);
+  const maxMonth = monthOf(maxDate);
+  const canPrev = compareMonths(view, minMonth) > 0;
+  const canNext = compareMonths(view, maxMonth) < 0;
 
-  const prevMonth = () => {
-    const newMonth = subMonths(currentMonth, 1);
-    if (newMonth >= minMonth) setCurrentMonth(newMonth);
+  const select = (date: ISODate) => {
+    if (date >= minDate && date <= maxDate) onDateSelect(date);
   };
 
-  const nextMonth = () => {
-    const newMonth = addMonths(currentMonth, 1);
-    if (newMonth <= maxMonth) setCurrentMonth(newMonth);
+  // Arrow keys move the selection by a day/week, matching the WAI-ARIA grid pattern.
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
+    if (step === undefined) return;
+    e.preventDefault();
+    select(addDays(selectedDate, step));
   };
 
-  const renderCalendarDays = () => {
-    const days = [];
-    const totalDays = daysInMonth(currentMonth);
-    const firstDay = firstDayOfMonth(currentMonth);
+  const cells = [];
+  for (let i = 0; i < firstWeekday(view); i++) {
+    cells.push(<div key={`pad-${i}`} aria-hidden="true" />);
+  }
+  for (let day = 1; day <= daysInMonth(view); day++) {
+    const date = isoFromParts(view.year, view.month, day);
+    const disabled = date < minDate || date > maxDate;
+    const selected = date === selectedDate;
+    const isToday = date === today;
+    const isFirstDay = date === FIRST_DAY;
 
-    // **Empty spots for first week alignment**
-    for (let i = 0; i < firstDay; i++) {
-      days.push(<div key={`empty-${i}`} className="h-8 w-8"></div>);
-    }
-
-    // **Render Days**
-    for (let day = 1; day <= totalDays; day++) {
-      const date = new Date(
-        currentMonth.getFullYear(),
-        currentMonth.getMonth(),
-        day
-      );
-      const isToday = isSameDay(new Date(), date);
-      const isSelected = isSameDay(selectedDate, date);
-      const isSpecialDate = isSameDay(specialDate, date);
-      const isDisabled = date > maxDate || date < minDate;
-
-      days.push(
-        <div
-          key={day}
-          onClick={() => !isDisabled && onDateSelect(date)}
-          className={`h-8 w-8 flex items-center justify-center rounded-full cursor-pointer relative
-            ${
-              isDisabled
-                ? "text-gray-400 cursor-not-allowed"
-                : isSelected
+    cells.push(
+      <button
+        key={date}
+        type="button"
+        role="gridcell"
+        disabled={disabled}
+        aria-selected={selected}
+        aria-current={isToday ? "date" : undefined}
+        aria-label={formatLong(date)}
+        tabIndex={selected ? 0 : -1}
+        onClick={() => select(date)}
+        className={`relative mx-auto h-9 w-9 rounded-full text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500
+          ${
+            disabled
+              ? "cursor-not-allowed text-gray-400 dark:text-gray-600"
+              : selected
                 ? "bg-blue-600 text-white"
                 : isToday
-                ? "border border-red-500"
-                : "hover:bg-gray-200 dark:hover:bg-gray-700"
-            }
-          `}
-        >
-          {day}
-          {isSpecialDate && (
-            <span className="absolute top-0 right-0 text-yellow-500">★</span>
-          )}
-        </div>
-      );
-    }
-
-    return days;
-  };
+                  ? "border border-red-500 hover:bg-gray-200 dark:hover:bg-gray-700"
+                  : "hover:bg-gray-200 dark:hover:bg-gray-700"
+          }`}
+      >
+        {day}
+        {isFirstDay && (
+          <span className="absolute -right-0.5 -top-0.5 text-xs text-yellow-500" aria-hidden="true">
+            ★
+          </span>
+        )}
+      </button>,
+    );
+  }
 
   return (
-    <div className="bg-white dark:bg-gray-900 shadow-lg rounded-lg p-4 border border-gray-300 dark:border-gray-700">
-      <div className="flex justify-between items-center mb-4">
+    <div className="rounded-lg border border-gray-300 bg-white p-4 shadow-lg dark:border-gray-700 dark:bg-gray-900">
+      <div className="mb-4 flex items-center justify-between">
         <button
-          onClick={prevMonth}
-          disabled={currentMonth <= minDate}
-          className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
+          type="button"
+          onClick={() => setView(addMonths(view, -1))}
+          disabled={!canPrev}
+          aria-label="Previous month"
+          className="rounded-full p-2 hover:bg-gray-200 disabled:opacity-30 dark:hover:bg-gray-700"
         >
           ◀️
         </button>
-        <h2 className="text-lg font-bold text-red-600 dark:text-yellow-400">
-          {format(currentMonth, "MMMM yyyy")}
+        <h2 className="text-lg font-bold text-red-600 dark:text-yellow-400" aria-live="polite">
+          {formatMonth(view)}
         </h2>
         <button
-          onClick={nextMonth}
-          disabled={currentMonth >= maxDate}
-          className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
+          type="button"
+          onClick={() => setView(addMonths(view, 1))}
+          disabled={!canNext}
+          aria-label="Next month"
+          className="rounded-full p-2 hover:bg-gray-200 disabled:opacity-30 dark:hover:bg-gray-700"
         >
           ▶️
         </button>
       </div>
-      <div className="grid grid-cols-7 gap-1 text-center text-gray-700 dark:text-gray-400">
-        {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-          <div key={i} className="font-bold">
+      <div
+        role="grid"
+        aria-label={formatMonth(view)}
+        onKeyDown={onKeyDown}
+        className="grid grid-cols-7 gap-1 text-center text-gray-700 dark:text-gray-300"
+      >
+        {WEEKDAYS.map((d) => (
+          <div key={d} role="columnheader" className="text-xs font-bold">
             {d}
           </div>
         ))}
-        {renderCalendarDays()}
+        {cells}
       </div>
     </div>
   );
