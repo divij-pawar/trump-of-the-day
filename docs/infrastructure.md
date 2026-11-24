@@ -74,6 +74,8 @@ The per-IP rate limit needs the visitor's real address. Requests through the sit
 
 ### First deploy
 
+The complete walkthrough, with the problems that came up and how to fix them, is in [setup.md](setup.md). This is the short checklist.
+
 1. **Database.** Bring Neon up to the current schema: run `db/migrations/002_dedupe_vector_digest.sql` from the pipeline repo with the owner connection string (take a Neon branch first; it deletes duplicate links), then `python insert_news.py rescore`, `backfill-embeddings` (if you have a Voyage key) and `enrich <start> <end>` for briefs on past days. See the pipeline's [docs/db.md](../trump-of-the-day-server/docs/db.md). Rotate the `news_readonly` password if it was ever in the old frontend bundle (`VITE_NEON_NEWS_URL`).
 2. **Accounts and tools.** Create a GCP project and link a billing account (Cloud Run requires one even inside the free tier). Create an Upstash account and a Management API key (console.upstash.com → Account → Management API). Install `gcloud` and `terraform`, then run `gcloud auth application-default login`.
 3. **State bucket.** Create a GCS bucket with versioning on, then copy `backend.hcl.example` to `backend.hcl` and fill it in.
