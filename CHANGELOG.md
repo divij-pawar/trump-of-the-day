@@ -5,13 +5,16 @@ All notable changes to the site, API and infrastructure. The pipeline keeps its 
 ## [Unreleased]
 
 ### Hosting
-- **The live site moved to GCP at about $0/month:** Cloud Run (scales to zero, request-based billing, at most 2 instances) behind Firebase Hosting, whose CDN serves the SPA and caches `/api/*` responses. Terraform is in `infra/gcp/`:
+- **Production at about $0/month: Netlify + Cloud Run + Upstash Redis.** Netlify keeps serving the site and proxies `/api/*` to the API on Cloud Run (scales to zero, request-based billing, at most 2 instances); `netlify.toml` and `scripts/netlify-redirects.mjs` generate the proxy rule from `API_ORIGIN`, and the build fails without it so a site with no API behind it can't be published. Terraform is in `infra/gcp/`:
+  - Cloud Run with WebSocket-friendly settings (1 h request timeout, 250 concurrent requests per instance);
+  - Upstash Redis (free plan, `auto_scale` off) for the shared cache, rate limits and live-update pub/sub, with its URL written to Secret Manager;
   - Artifact Registry with a cleanup policy;
-  - Secret Manager with placeholder versions, so no secrets go into state;
+  - Secret Manager with placeholder versions for the secrets Terraform doesn't create;
   - least-privilege runtime and deploy service accounts;
   - Workload Identity Federation for keyless GitHub deploys;
   - a billing budget alert and a 15-minute uptime check with an alert.
-- `deploy-gcp.yml` deploys after CI on `main`, and `firebase.json` routes `/api/**` and `/healthz` to Cloud Run.
+- `deploy-gcp.yml` deploys the API after CI on `main` and smoke-tests `/healthz` and `/readyz`; Netlify deploys the site on push.
+- The submodule URL is HTTPS (it was SSH), so Netlify and CI can clone it without a key; Netlify's builds were failing at "Host key verification failed".
 - The AWS Terraform moved from `infra/terraform/` to `infra/aws/` and is now an on-demand reference stack. `deploy.yml` became `deploy-aws.yml` and is manual only.
 - CI validates both Terraform stacks.
 - [docs/costs.md](docs/costs.md) breaks down each service's cost and why it was chosen.
@@ -22,6 +25,9 @@ All notable changes to the site, API and infrastructure. The pipeline keeps its 
 - Per-IP rate limiting (300/min by default), with counters in Redis shared across tasks and spoof-resistant client IPs behind the proxies.
 
 ### Added
+- Live updates at scale through Redis pub/sub: the pipeline announces each processed day through Upstash's REST API, and every API instance subscribes and pushes to its own WebSocket clients (`LIVE_UPDATES=redis`, `RedisNewsSubscriber`). Postgres `LISTEN` stays as an option for the AWS stack. Tested locally with two API replicas receiving one announcement.
+- WebSocket limits for Cloud Run billing: `WS_MAX_SECONDS` closes connections after a maximum lifetime (code 4000) and `WS_ALLOWED_ORIGINS` refuses other sites' pages; the frontend connects only while the tab is visible, disconnects a minute after it's hidden, and reconnects at once after a lifetime close. `VITE_WS_URL` points the socket at Cloud Run, since Netlify can't proxy WebSockets.
+- `docker-compose.yml` mirrors production: API on Redis pub/sub, plus `redis-rest`, an Upstash-compatible REST endpoint for the pipeline.
 - Sentence-level citations in the daily brief. Each sentence ends with numbered links ([1], [2]…) to the stories it's based on; clicking one scrolls to that story's card and highlights it, and cited cards show "Cited in brief [n]". The API's digest gained `paragraphs` (sentences with the story ids they cite); the news cache key moved to `v2` so cached responses pick it up. Briefs without citations still render as plain paragraphs.
 - `api/`: a Fastify API with:
   - `GET /api/news`, `/api/dates/latest`, `/api/news/:id/similar` and `/api/search`;
@@ -65,6 +71,8 @@ All notable changes to the site, API and infrastructure. The pipeline keeps its 
 - Docs: README, ARCHITECTURE.md, architecture, costs and infrastructure describe the cited brief and the retry policy; the first-deploy steps now include migrating Neon and the order to push the two repos; development.md covers running the real pipeline against the local database and a troubleshooting table for the issues hit during local testing.
 
 ### Fixed
+- The Vite dev server crashed with `ENOSPC` when it ran out of file watches on the pipeline's Python `env/`; it now ignores non-frontend folders.
+- The k6 WebSocket test sends an `Origin` header, which the API now requires.
 - The calendar computed the last navigable month as `new Date(year, month, 31)`, which rolled over into the next month for 30-day months and February.
 - The previous/next month buttons compared a mid-month date against the min/max dates, so they enabled and disabled at the wrong times.
 - "Today" was computed in the visitor's local timezone, so the latest day was off by one for visitors west of UTC in the evening.
@@ -77,4 +85,5 @@ Found by running the full stack locally (Docker Postgres + pgvector, Redis, API,
 - The local Postgres health check passed during first-boot init, before Postgres accepted TCP connections, so the API started early and failed its first requests. It now checks over TCP.
 
 ### Removed
+- Firebase Hosting (`firebase.json`, its Terraform resources and deploy roles, the `google-beta` provider): the site stays on Netlify.
 - `@neondatabase/serverless`, `src/lib/neon.ts`, the unused `useAllNews` hook, `date-fns`, and the leftover Supabase schema image.

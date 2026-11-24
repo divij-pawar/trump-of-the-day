@@ -6,7 +6,7 @@
 .                         frontend (Vite + React), root package.json
 api/                      Fastify API, its own package.json
 trump-of-the-day-server/  git submodule: Python pipeline + db schema
-infra/gcp/                Terraform for the live site (Cloud Run + Firebase)
+infra/gcp/                Terraform for production (Cloud Run + Upstash Redis; the site is on Netlify)
 infra/aws/                Terraform for the on-demand AWS stack
 loadtest/                 k6 scripts, seed data for docker compose
 ```
@@ -22,12 +22,14 @@ npm ci && npm run dev               # http://localhost:5173
 
 The Vite dev server proxies `/api` and `/ws` to `http://localhost:8080`, mirroring the CloudFront routing in production. If nothing answers there, `/api` requests get a `502` whose message (shown in the page's error box) says the API is unreachable and how to start it. Point the proxy elsewhere with `API_PROXY_TARGET=http://host:port npm run dev`, or build against a remote API with `VITE_API_URL`.
 
+The stack mirrors production: the API gets live updates from Redis pub/sub (`LIVE_UPDATES=redis`), and `redis-rest` on `:8079` is an Upstash-compatible REST endpoint, so the pipeline's announce works locally too (`UPSTASH_REDIS_REST_URL=http://127.0.0.1:8079 UPSTASH_REDIS_REST_TOKEN=local-token`). WebSockets are accepted from `http://localhost:5173` and `http://127.0.0.1:5173`; for another port, `WS_ALLOWED_ORIGINS=… docker compose up -d api`.
+
 The database keeps its data in a Docker volume across restarts. `docker compose down -v` deletes it, and the next `up` re-seeds.
 
 To trigger a live update, run this while the page is open:
 
 ```bash
-docker compose exec postgres psql -U owner -d news -c "NOTIFY news_updated, '2025-03-01'"
+docker compose exec redis redis-cli PUBLISH news_updated 2025-03-01
 ```
 
 ### Against a real Neon database
@@ -62,8 +64,10 @@ The full loop (real scraping, the AI brief with citations, `NOTIFY`, live update
 
 ```bash
 cd trump-of-the-day-server
-DATABASE_URL=postgres://owner:owner@127.0.0.1:5432/news python insert_news.py yesterday today
-DATABASE_URL=postgres://owner:owner@127.0.0.1:5432/news python insert_news.py enrich 2026-11-13 2026-11-13   # rewrite one day's brief
+export DATABASE_URL=postgres://owner:owner@127.0.0.1:5432/news
+export UPSTASH_REDIS_REST_URL=http://127.0.0.1:8079 UPSTASH_REDIS_REST_TOKEN=local-token   # live update to open pages
+python insert_news.py yesterday today
+python insert_news.py enrich 2026-11-13 2026-11-13   # rewrite one day's brief
 ```
 
 **Always set `DATABASE_URL` explicitly here.** If that `.env` also holds the production Neon URL, an unset variable would make the run write to production. A variable already set in the environment wins over `.env`.
@@ -101,7 +105,8 @@ Push the submodule commit before the parent commit that references it. Otherwise
   - frontend: typecheck, lint, test, build;
   - API: typecheck, test, Docker build;
   - Terraform: fmt and validate, for both `infra/gcp` and `infra/aws`.
-- `.github/workflows/deploy-gcp.yml` deploys the live site after CI passes on `main`. It pushes the API image to Artifact Registry, rolls Cloud Run, builds the frontend with `VITE_LIVE_UPDATES=false` and publishes it to Firebase Hosting. It authenticates through Workload Identity Federation and does nothing until the `GCP_*` repository variables exist.
+- `.github/workflows/deploy-gcp.yml` deploys the API after CI passes on `main`: it pushes the image to Artifact Registry, rolls Cloud Run and smoke-tests `/healthz` and `/readyz`. It authenticates through Workload Identity Federation and does nothing until the `GCP_*` repository variables exist.
+- Netlify builds and publishes the site on every push to `main` (`netlify.toml`), and refuses to publish without `API_ORIGIN`.
 - `.github/workflows/deploy-aws.yml` is manual only, for when the AWS stack is up ([infrastructure.md](infrastructure.md)).
 - The pipeline repo has its own `test.yml`, `build-push.yml` and `daily-run.yml`.
 
@@ -109,6 +114,7 @@ Push the submodule commit before the parent commit that references it. Otherwise
 
 | Symptom | Cause and fix |
 |---|---|
+| Dev server crashes with `ENOSPC` from a file watcher | It ran out of Linux file watches. `vite.config.ts` ignores the pipeline (and its `env/`), `api/` and `infra/`; if it still happens, raise `fs.inotify.max_user_watches`. |
 | Page shows "Can't reach the API at http://localhost:8080…" (or `Request failed (500)` from an older dev server) | The Docker stack isn't up. `sudo systemctl start docker`, then `docker compose up -d`. `sudo systemctl enable docker` starts it at boot. |
 | `failed to connect to the docker API at unix:///var/run/docker.sock` | Same: the Docker daemon is stopped. |
 | API logs `ECONNREFUSED` right after the first `up` | Postgres is still seeding (~80 s). The health check waits for TCP, so this only appears if you start the API by hand. |

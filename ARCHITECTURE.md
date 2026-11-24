@@ -15,10 +15,13 @@ The whole system does two jobs:
 flowchart LR
     visitor(["👤 Visitor"])
 
-    subgraph google["☁️ Google Cloud: the live site (~$0/month)"]
-        firebase["🌐 Firebase Hosting<br/>website + CDN cache"]
+    netlify["🌐 Netlify<br/>website + CDN"]
+
+    subgraph google["☁️ Google Cloud (~$0/month)"]
         api["⚙️ API<br/>Cloud Run, sleeps when idle"]
     end
+
+    redis[("⚡ Upstash Redis<br/>cache + live-update channel")]
 
     db[("🗄️ Neon Postgres<br/>news, summaries,<br/>search vectors")]
 
@@ -32,20 +35,24 @@ flowchart LR
         voyage["🧭 Voyage AI<br/>embeddings"]
     end
 
-    visitor -->|"opens the site"| firebase
-    firebase -->|"/api requests"| api
+    visitor -->|"opens the site"| netlify
+    netlify -->|"/api requests"| api
+    visitor -.->|"live updates (WebSocket)"| api
+    api --> redis
     api -->|"reads only"| db
 
     pipeline -->|"1 · fetch headlines"| sources
     pipeline -->|"2 · write summary"| openrouter
     pipeline -->|"3 · make search vectors"| voyage
     pipeline -->|"4 · save everything"| db
+    pipeline -->|"5 · announce the new day"| redis
 ```
 
 | Piece | In one sentence |
 |---|---|
-| **Firebase Hosting** | Serves the website and keeps copies of recent answers, so most visits never wake the API. |
-| **API (Cloud Run)** | A small server that answers "what's the news for this day?" and shuts itself off when nobody is asking. |
+| **Netlify** | Serves the website from its CDN and forwards `/api` requests to the API. |
+| **API (Cloud Run)** | A small server that answers "what's the news for this day?" and shuts itself off when nobody is asking. Open pages also keep a WebSocket to it for live updates. |
+| **Upstash Redis** | Shared memory for the API: cached answers, rate-limit counters, and the channel the pipeline uses to say "a new day is ready". |
 | **Neon Postgres** | The database: every article, each day's summary, and the vectors that power search. |
 | **News pipeline** | Runs once a day on GitHub's computers: scrapes, ranks, summarizes and saves. |
 | **OpenRouter Free Router** | Picks a free AI model to write the day's summary, with each sentence citing its stories. The site shows which model wrote it. |
@@ -80,23 +87,26 @@ If the AI step fails, the day still gets its news list, just without a summary. 
 ```mermaid
 sequenceDiagram
     actor V as 👤 Visitor
-    participant F as 🌐 Firebase Hosting
+    participant F as 🌐 Netlify
     participant A as ⚙️ API on Cloud Run
+    participant R as ⚡ Upstash Redis
     participant D as 🗄️ Neon database
 
     V->>F: Open trumpoftheday site
     F-->>V: Website files (from the CDN)
     V->>F: News for March 1?
-    alt Firebase already has a fresh copy
-        F-->>V: Cached answer (instant)
+    F->>A: Forward the request
+    Note over A: Wakes up if it was asleep
+    alt Redis has a fresh copy
+        R-->>A: Cached answer
     else Not cached yet
-        F->>A: Forward the request
-        Note over A: Wakes up if it was asleep
         A->>D: Stories + summary for March 1
         D-->>A: Rows
-        A-->>F: Answer (keep for 1–5 min)
-        F-->>V: Answer
+        A->>R: Keep a copy (1 min to 1 day)
     end
+    A-->>F: Answer
+    F-->>V: Answer
+    V->>A: Open WebSocket for live updates (direct)
     Note over V: Shows the summary card, each sentence with<br/>numbered links [1] [2] to the stories it cites,<br/>"Summarized by ‹model› (free model via OpenRouter)",<br/>then the ranked stories
 ```
 
@@ -111,28 +121,29 @@ flowchart LR
     deploy["🚀 Deploy (GCP)"]
     image["📦 New API image<br/>Artifact Registry"]
     run["⚙️ Cloud Run<br/>rolls to new version"]
-    site["🌐 Firebase Hosting<br/>publishes new website"]
+    site["🌐 Netlify<br/>builds and publishes the website"]
 
     dev --> ci -->|"all green"| deploy
     deploy --> image --> run
-    deploy --> site
+    dev -->|"Netlify builds on push"| site
 ```
 
-GitHub logs into Google Cloud with **Workload Identity Federation**: a short-lived pass issued per run, so no password or key is stored anywhere.
+GitHub logs into Google Cloud with **Workload Identity Federation**: a short-lived pass issued per run, so no password or key is stored anywhere. Netlify builds the website by itself on every push; its build refuses to publish unless it knows where the API is.
 
 ---
 
 ## 5. Two clouds, same app
 
-The application code is identical. Only where it runs differs, and both are described in Terraform.
+The application code is identical. Only where it runs differs, and both are described in Terraform (the website's Netlify settings are in `netlify.toml`).
 
 ```mermaid
 flowchart TB
     code["📁 Same code<br/>website + API + pipeline"]
 
-    subgraph gcp["☁️ Google Cloud: LIVE, ~$0/month"]
+    subgraph gcp["☁️ Netlify + Google Cloud + Upstash: LIVE, ~$0/month"]
         direction LR
-        g1["Firebase Hosting"] --> g2["Cloud Run<br/>0–2 instances"]
+        g1["Netlify"] --> g2["Cloud Run<br/>0–2 instances"]
+        g2 --> g3["Upstash Redis"]
     end
 
     subgraph aws["☁️ AWS: ON DEMAND, ~$70/month while up"]
@@ -145,12 +156,12 @@ flowchart TB
     code -->|"infra/aws"| aws
 ```
 
-| | Google Cloud (live) | AWS (on demand) |
+| | Netlify + Google Cloud (live) | AWS (on demand) |
 |---|---|---|
 | Purpose | Run the real site cheaply | Show the full, always-on version for demos and load tests |
 | Cost | About $0/month | About $2.30 per day while it's up |
 | Scales by | Starting instances on demand, down to zero | Keeping 2+ servers running, adding more under load |
-| Extras | — | Redis cache, live updates over WebSockets |
+| Extras | Upstash Redis, live updates over WebSockets (Redis pub/sub) | ElastiCache Redis, live updates over WebSockets (Postgres LISTEN) |
 | Turn on / off | Always on | `terraform apply` / `terraform destroy` |
 
 More detail: [infrastructure](docs/infrastructure.md) · [costs](docs/costs.md) · [API](docs/api.md) · [load tests](docs/load-testing.md)

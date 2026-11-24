@@ -9,7 +9,7 @@ A daily archive of news about Donald Trump and his administration: pick a day on
 - A daily brief: a neutral AI-written summary of the day's top stories, which are highlighted in the feed. Every sentence cites its sources with numbered links that jump to the story cards below, and the card names the model that wrote it (for example `upstage/solar-pro-3`, a free model via OpenRouter)
 - Stories ranked by relevance rather than scrape order
 - Semantic search across the whole archive, and "related coverage" for any story (pgvector)
-- Live updates: open pages refresh when the daily pipeline publishes new stories (WebSockets; on the AWS and local stacks)
+- Live updates: open pages refresh when the daily pipeline publishes new stories (WebSockets, fanned out across API instances through Redis pub/sub)
 - Distinct loading, empty and error states, with retry
 - Dark mode and light mode with system preference detection
 - Responsive design for mobile and desktop
@@ -27,20 +27,22 @@ flowchart LR
   cron -->|daily brief| openrouter[OpenRouter<br/>Free Router]
   cron -->|embeddings| voyage[Voyage AI]
   cron -->|save stories, brief,<br/>vectors| neon[(Neon Postgres<br/>+ pgvector)]
-  browser((Browser)) --> fb[Firebase Hosting<br/>CDN]
-  fb -->|static files| spa[React SPA]
-  fb -->|/api/*| run[Fastify API<br/>Cloud Run, scales to zero]
+  cron -->|"PUBLISH news_updated<br/>(Upstash REST)"| redis[(Upstash Redis<br/>cache, rate limit, pub/sub)]
+  browser((Browser)) --> netlify[Netlify<br/>site + CDN]
+  netlify -->|/api/* proxy| run[Fastify API<br/>Cloud Run, scales to zero]
+  browser -.->|wss /ws live updates| run
+  run --> redis
   run -->|read-only role| neon
 ```
 
-On AWS the same API runs on ECS Fargate behind an ALB and CloudFront, with ElastiCache Redis and WebSocket live updates.
+The site is on Netlify, which proxies `/api/*` to the API on Cloud Run. Browsers open the live-updates WebSocket to Cloud Run directly (Netlify can't proxy WebSockets). After each day, the pipeline publishes to Upstash Redis, and every running API instance pushes the update to its connected browsers. On AWS the same API runs on ECS Fargate behind an ALB and CloudFront, with ElastiCache Redis, as an on-demand stack for demos and load tests.
 
 | Path | What it is |
 |---|---|
 | [`src/`](src/) | React + TypeScript + Tailwind frontend (Vite) |
 | [`api/`](api/) | Fastify API: cached news queries, search, health checks, WebSocket live updates |
 | [`trump-of-the-day-server/`](https://github.com/harshaldafade/trump-of-the-day-server) | Git submodule: the Python news pipeline (scraper, relevance scoring, daily brief, embeddings) and the database schema |
-| [`infra/gcp/`](infra/gcp/) | Live infrastructure: Cloud Run, Firebase Hosting, Secret Manager, Artifact Registry, Workload Identity Federation, budget and uptime alerts |
+| [`infra/gcp/`](infra/gcp/) | Production infrastructure: Cloud Run, Upstash Redis, Secret Manager, Artifact Registry, Workload Identity Federation, budget and uptime alerts (the site itself is on Netlify: [`netlify.toml`](netlify.toml)) |
 | [`infra/aws/`](infra/aws/) | On-demand AWS stack: VPC, ECS Fargate, ALB, ElastiCache, S3 + CloudFront, IAM with GitHub OIDC, alarms |
 | [`loadtest/`](loadtest/) | k6 load tests (HTTP and WebSocket) and seed data for the local stack |
 | [`docs/`](docs/) | Architecture, API, infrastructure, development and load-testing docs |
@@ -102,7 +104,7 @@ Prerequisites: Node.js 22+, Docker (with the daemon running: `sudo systemctl sta
 - Fastify, Redis (ioredis), node-postgres, WebSockets
 - Neon (serverless Postgres) with pgvector
 - Python pipeline: GDELT, Google News RSS, OpenRouter free models (or Claude) for the daily brief, Voyage AI embeddings
-- Terraform on GCP: Cloud Run, Firebase Hosting, Secret Manager, Artifact Registry, Cloud Monitoring, billing budgets
+- Netlify (site and `/api` proxy); Terraform on GCP and Upstash: Cloud Run, Upstash Redis, Secret Manager, Artifact Registry, Cloud Monitoring, billing budgets
 - Terraform on AWS: ECS Fargate, ALB, ElastiCache, S3, CloudFront, Secrets Manager, CloudWatch
 - GitHub Actions (CI, keyless deploys via GCP Workload Identity Federation and AWS OIDC), k6
 

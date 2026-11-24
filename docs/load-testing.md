@@ -9,9 +9,9 @@ Two [k6](https://k6.io) scenarios live in [`loadtest/`](../loadtest/):
 # Local stack
 docker compose up --build
 k6 run -e RATE=800 loadtest/http.js
-k6 run -e CONNECTIONS=2000 loadtest/websocket.js
+k6 run -e CONNECTIONS=2000 loadtest/websocket.js   # -e ORIGIN=… must be in the API's WS_ALLOWED_ORIGINS (default http://localhost:5173)
 # while it runs, measure fan-out to every client:
-docker compose exec postgres psql -U owner -d news -c "NOTIFY news_updated, '2025-03-01'"
+docker compose exec redis redis-cli PUBLISH news_updated 2025-03-01
 
 # Deployed stack (through CloudFront). Raise RATE_LIMIT_MAX first or every request after the first 300/min is a 429.
 k6 run -e BASE_URL=https://dxxxx.cloudfront.net loadtest/http.js

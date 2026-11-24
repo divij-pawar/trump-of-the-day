@@ -1,6 +1,6 @@
 # Architecture
 
-> **Two deployments.** The live site runs on **GCP**: Firebase Hosting in front of Cloud Run, no Redis, no WebSockets, about $0/month. The request path below describes the **AWS** stack, which is kept in Terraform and brought up on demand. The application code is the same for both; only the hosting differs ([infrastructure.md](infrastructure.md), [costs.md](costs.md)).
+> **Two deployments.** Production is **Netlify + Cloud Run + Upstash Redis**: Netlify serves the site and proxies `/api/*` to Cloud Run, browsers open live-update WebSockets to Cloud Run directly, and the pipeline announces new days through Redis pub/sub. About $0/month ([infrastructure.md](infrastructure.md)). The request path below describes the **AWS** stack, which is kept in Terraform and brought up on demand; the caching and live-update sections cover both. The application code is the same for both; only the hosting differs ([costs.md](costs.md)).
 
 ## Request path
 
@@ -16,7 +16,7 @@ Same-origin routing means the frontend needs no CORS configuration and no API UR
 The pipeline (the `trump-of-the-day-server` submodule) runs daily on GitHub Actions at 14:00 UTC and processes yesterday and today:
 
 1. Scrape GDELT and Google News RSS. Deduplicate, drop non-Latin-script headlines, and fetch descriptions and thumbnails from the article pages.
-2. Score each article for relevance (`lib/relevance.py`) and insert. A `UNIQUE (link)` constraint with `ON CONFLICT DO NOTHING` makes re-running a day add only new stories.
+2. Score each article for relevance (`lib/relevance.py`) and insert. A unique index on `md5(link)` with `ON CONFLICT DO NOTHING` makes re-running a day add only new stories (hashed because some links are too long for a btree index).
 3. For each day: embed new rows with Voyage (`voyage-3.5`, 1024 dimensions, stored in pgvector), have an LLM write the daily brief from the top 40 stories (OpenRouter's Free Router `openrouter/free` by default, which picks an available free model; Claude via `DIGEST_PROVIDER=anthropic`). The brief comes back sentence by sentence, each sentence with the ids of the stories it cites (`daily_digest.paragraphs`), which the site turns into numbered links to the story cards. The model that wrote it is stored with the brief and shown on the site. Then `NOTIFY news_updated, '<date>'`.
 
 ## Caching
@@ -25,13 +25,16 @@ There are three layers, from the browser inward:
 
 | Layer | What | TTL |
 |---|---|---|
-| CloudFront | `/api/*` responses, keyed on the query string, honoring the API's `Cache-Control` | 60 s for today and yesterday (UTC), 5 min for older days |
+| CDN (Netlify in production, CloudFront on AWS) | Static files; on AWS also `/api/*` responses, honoring the API's `Cache-Control` | 60 s for today and yesterday (UTC), 5 min for older days |
 | Redis | Full `/api/news` response per date; latest date; related stories; search results | 60 s for today and yesterday, 24 h for older days (they don't change) |
 | Single-flight | Concurrent cache misses for the same key in one task share one database query | per request |
 
-The API invalidates instead of only waiting for TTLs. Each task holds one direct (non-pooled) Postgres connection that `LISTEN`s on `news_updated`. When the pipeline notifies, every task deletes that date's Redis key and the latest-date key, then pushes `{"type":"news_updated","date":...}` to its WebSocket clients. Open pages showing that date refetch with `cache: "no-cache"`, so the browser's own HTTP cache (the API sends `max-age` up to 5 minutes) can't answer with the old copy. CloudFront can still serve the previous response for up to 60 s.
+The API invalidates instead of only waiting for TTLs. After each processed day the pipeline announces the date on the `news_updated` channel, and every API instance subscribed to it deletes that date's Redis key and the latest-date key, then pushes `{"type":"news_updated","date":...}` to its WebSocket clients. Open pages showing that date refetch with `cache: "no-cache"`, so the browser's own HTTP cache (the API sends `max-age` up to 5 minutes) can't answer with the old copy.
 
-The listener has to use a direct connection: Neon's `-pooler` endpoint runs PgBouncer in transaction mode, which doesn't support `LISTEN`.
+The channel depends on the deployment (`LIVE_UPDATES` in the API):
+
+- **Production: Redis pub/sub (`redis`).** The pipeline calls Upstash's REST API to `DEL` the day's cache keys and `PUBLISH news_updated <date>`; each Cloud Run instance holds a subscriber connection. One publish reaches every instance, the standard way to fan WebSocket messages out across horizontally scaled servers. It holds no database connection, so Neon can scale to zero, and the pipeline's own `DEL` keeps the cache correct even when no instance is running.
+- **AWS stack: Postgres `LISTEN` (`postgres`).** Its ElastiCache Redis is private to the VPC, so the pipeline can't publish to it; instead each task `LISTEN`s on a direct (non-pooled) Neon connection and the pipeline sends `NOTIFY`. It has to be the direct host: Neon's `-pooler` endpoint runs PgBouncer in transaction mode, which doesn't support `LISTEN`. CloudFront can still serve the previous response for up to 60 s.
 
 The load test shows why the cache matters. Against a stub database that models the real 10-connection pool, p95 latency at 800 req/s goes from 2.9 s with no cache to 1.1 ms with one ([load-testing.md](load-testing.md)).
 
@@ -40,7 +43,7 @@ The load test shows why the cache matters. Against a stub database that models t
 | If this fails | What happens |
 |---|---|
 | Redis | Reads fall through to Postgres (commands time out after 500 ms and aren't queued); rate limiting is skipped. `/readyz` reports `redis: false` but stays 200. |
-| `LISTEN` connection | Reconnects with exponential backoff (1 s to 60 s). Until then, updates appear when the 60 s TTL expires. |
+| Live-update channel (Redis subscriber or `LISTEN`) | Reconnects on its own (ioredis; exponential backoff 1 s to 60 s for `LISTEN`). Until then, updates appear when the 60 s TTL expires. |
 | Postgres | `/readyz` returns 503 and the ALB takes tasks out of rotation. If every task fails, the ALB fails open and the API answers `503 {"error":"unavailable"}`, which the frontend shows as an error with a retry button rather than as "no news". |
 | Voyage | `/api/search` returns 503; the frontend says search is unavailable. Related coverage still works, since it only uses stored embeddings. |
 | Daily-brief LLM (pipeline) | Up to three attempts, each re-routed by the Free Router (two with structured output, the last without). Reasoning is capped because some free models otherwise think until `max_tokens` and return nothing. If all three fail, the day has no brief, the feed is unaffected, and the next day's run tries again. With Claude, refusals are retried on a fallback model server-side. |

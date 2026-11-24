@@ -1,6 +1,6 @@
 # API
 
-Fastify service in [`api/`](../api/). In production it's served under the site's own origin (`/api/*`, `/ws`) via CloudFront. Locally it runs on `:8080`.
+Fastify service in [`api/`](../api/). In production it runs on Cloud Run: Netlify proxies `/api/*` to it under the site's own origin, and browsers connect to its `/ws` directly. On the AWS stack both go through CloudFront. Locally it runs on `:8080`.
 
 Dates are always `YYYY-MM-DD` strings in UTC calendar days, matching how the pipeline buckets articles. Errors are JSON: `{"error": "<code>", "message": "..."}`.
 
@@ -47,7 +47,7 @@ Readiness: `200` if Postgres answers, else `503`. Used by the ALB target group.
 { "status": "ready", "checks": { "db": true, "redis": true, "live": true }, "websocketClients": 412 }
 ```
 
-Redis and the `LISTEN` connection are reported but don't affect the status code, because the API works without them.
+Redis and the live-update channel (`live`: the Redis subscriber or the `LISTEN` connection) are reported but don't affect the status code, because the API works without them.
 
 Neither health endpoint is rate limited or requires the origin header.
 
@@ -63,7 +63,11 @@ Server to client:
 
 Client to server: `{"type":"ping","t":<number>}`. This is optional and used by the load test to measure round-trip time. Anything else is ignored, and frames over 1 KB close the connection.
 
-The server sends a WebSocket protocol ping every 30 s and drops clients that don't answer. The frontend reconnects with exponential backoff (1 s to 60 s).
+The server sends a WebSocket protocol ping every 30 s and drops clients that don't answer.
+
+- **Origin check:** with `WS_ALLOWED_ORIGINS` set, an upgrade from any other `Origin` gets `403 {"error":"forbidden_origin"}` before the WebSocket opens.
+- **Maximum lifetime:** with `WS_MAX_SECONDS` set (600 in production), the server closes each connection after that long with close code `4000`. The frontend reconnects immediately when the tab is visible.
+- **Frontend behavior:** connects only while the tab is visible, closes the socket a minute after the tab is hidden, and reconnects with exponential backoff (1 s to 60 s) after other drops.
 
 ## Rate limiting
 
@@ -74,10 +78,13 @@ The server sends a WebSocket protocol ping every 30 s and drops clients that don
 | Variable | Required | Purpose |
 |---|---|---|
 | `DATABASE_URL` | yes | Read-only, pooled Neon connection string |
-| `DATABASE_URL_DIRECT` | no | Read-only, direct (non-pooler) connection string for `LISTEN`. Without it, live updates are off. |
-| `REDIS_URL` | no | `redis://` or `rediss://`. Without it (the GCP deployment), the API uses a bounded in-process cache and rate limits are per instance. |
+| `DATABASE_URL_DIRECT` | no | Read-only, direct (non-pooler) connection string for `LISTEN` (the AWS stack's live updates). |
+| `REDIS_URL` | no | `redis://` or `rediss://` (Upstash in production). Without it, the API uses a bounded in-process cache and rate limits are per instance. |
+| `LIVE_UPDATES` | no | `redis` (subscribe to `news_updated` pub/sub), `postgres` (`LISTEN` on `DATABASE_URL_DIRECT`) or `off`. Default: `postgres` if `DATABASE_URL_DIRECT` is set, else `redis` if `REDIS_URL` is, else `off`. |
+| `WS_MAX_SECONDS` | no | Close each WebSocket after this many seconds (default 0, never). Production: 600. |
+| `WS_ALLOWED_ORIGINS` | no | Comma-separated origins allowed to open `/ws`; unset allows any. Production: the Netlify site's origins. |
 | `VOYAGE_API_KEY` | no | Enables `/api/search`. Empty or `unset` (the GCP placeholder secret) means off. |
 | `ORIGIN_VERIFY_SECRET` | no | If set, requests without a matching `X-Origin-Verify` header get 403 (except health checks) |
 | `RATE_LIMIT_MAX` | no | Requests per minute per IP (default 300) |
-| `TRUST_PROXY_HOPS` | no | Proxies in front of the API (2 behind CloudFront and the ALB; default 0) |
+| `TRUST_PROXY_HOPS` | no | Proxies in front of the API (2 behind Netlify and Google's front end, or CloudFront and the ALB; default 0) |
 | `PORT`, `HOST`, `LOG_LEVEL` | no | Defaults `8080`, `0.0.0.0`, `info` |

@@ -2,53 +2,59 @@
 
 There are two Terraform stacks for the same app, each picked for a different job:
 
-| | [`infra/gcp/`](../infra/gcp/): **the live site** | [`infra/aws/`](../infra/aws/): **on-demand reference** |
+| | [`infra/gcp/`](../infra/gcp/): **production** | [`infra/aws/`](../infra/aws/): **on-demand reference** |
 |---|---|---|
-| Shape | Serverless: Cloud Run (scales to zero) behind Firebase Hosting's CDN | Always-on: ECS Fargate ×2 behind an ALB and CloudFront, ElastiCache Redis |
+| Shape | Serverless: Netlify serves the site and proxies `/api/*` to Cloud Run (scales to zero); Upstash Redis | Always-on: ECS Fargate ×2 behind an ALB and CloudFront, ElastiCache Redis |
 | Cost | **~$0/month** inside the free tiers ([costs.md](costs.md)) | ~$70/month while running, about $2.30/day |
-| Live updates (WebSockets) | Off (Firebase can't proxy them; Neon is allowed to sleep) | On |
-| Deploys | `deploy-gcp.yml`, automatically after CI on `main` | `deploy-aws.yml`, manual only |
+| Live updates (WebSockets) | On: browsers connect to Cloud Run directly; the pipeline publishes through Upstash Redis pub/sub | On: Postgres `LISTEN` (the pipeline can't reach the VPC's Redis) |
+| Deploys | API: `deploy-gcp.yml` after CI on `main`. Site: Netlify builds on push | `deploy-aws.yml`, manual only |
 | When to use | All the time | Demos and load tests: `apply`, test, `destroy` |
 
 Neon stays the database for both, and the pipeline keeps running on GitHub Actions for both.
 
 ---
 
-## GCP (live)
+## GCP + Netlify + Upstash (production)
 
 | File | Contents |
 |---|---|
-| `main.tf` | API enablement; Artifact Registry with a cleanup policy (stays under the 0.5 GB free storage); Secret Manager secrets; the Cloud Run service and its runtime service account; Firebase project and Hosting site |
+| `main.tf` | API enablement; Artifact Registry with a cleanup policy (stays under the 0.5 GB free storage); Secret Manager secrets; the Upstash Redis database and the secret holding its URL; the Cloud Run service and its runtime service account |
 | `iam.tf` | Workload Identity Federation for GitHub Actions; the deploy service account and its narrowly scoped roles |
 | `monitoring.tf` | Email channel, billing budget alert, 15-minute uptime check and alert policy |
-| `variables.tf`, `outputs.tf`, `versions.tf` | Inputs, values for the GitHub repository variables, providers and the GCS state backend |
+| `variables.tf`, `outputs.tf`, `versions.tf` | Inputs; values for Netlify, GitHub and the pipeline's secrets; the google and upstash providers and the GCS state backend |
+| [`netlify.toml`](../netlify.toml), [`scripts/netlify-redirects.mjs`](../scripts/netlify-redirects.mjs) | The site's build, cache headers, and the generated `/api/*` proxy rule |
 
 ### Request path
 
-The browser goes to `https://<site>.web.app` on Firebase Hosting:
+- **Static files:** Netlify's CDN serves the built site.
+- **`/api/*`:** Netlify proxies it to the Cloud Run URL (`API_ORIGIN`, written into `dist/_redirects` at build time). The browser only ever talks to the site's own origin, so there's no CORS.
+- **`/ws`:** Netlify can't proxy WebSockets, so the browser connects to `wss://<cloud run host>/ws` directly (`VITE_WS_URL`). The API accepts only the site's origins (`WS_ALLOWED_ORIGINS`) and closes each connection after 10 minutes (`WS_MAX_SECONDS`); the page reconnects while the tab is visible and disconnects a minute after it's hidden.
+- **Cloud Run** starts an instance on demand and scales back to zero after a period of no traffic. Billing is request-based (`cpu_idle = true`): CPU is charged only while a request is in flight. An open WebSocket counts as an in-flight request, which is why connections are capped and tied to tab visibility.
+- **Upstash Redis** holds the response cache (shared by all instances and surviving scale-to-zero), the rate-limit counters, and the `news_updated` pub/sub channel.
 
-- **Static files** are served from Google's CDN.
-- **`/api/**` and `/healthz`** are rewritten to the Cloud Run service (`firebase.json`). Firebase caches API responses at the edge according to the API's `Cache-Control` header: 60 s for recent days and 5 min for older ones. Most traffic never reaches Cloud Run.
-- **Cloud Run** starts an instance on demand, serves the request, and scales back to zero after a period of no traffic. Billing is request-based (`cpu_idle = true`): CPU is charged only while a request is in flight, which is what keeps it inside the free tier.
-- **Caching:** the API runs without Redis here and uses its in-process cache (`MemoryCache` in `api/src/cache.ts`). A cold instance simply reloads from Postgres.
+### Live updates
+
+After each processed day the pipeline calls Upstash's REST API: it deletes that day's cached response and `PUBLISH`es `news_updated <date>`. Every running Cloud Run instance is subscribed; each one drops its cache entry and pushes `{"type":"news_updated"}` to the browsers connected to it. That's the standard pattern for fanning WebSocket messages out across horizontally scaled servers, and unlike Postgres `LISTEN` it holds no database connection, so Neon can still scale to zero. With no instance running, the pipeline's own cache delete still makes the next visit fresh.
 
 ### Security and IAM design
 
-- **Runtime service account (`api-runtime`):** can read exactly its two secrets. It has no other roles; the API makes no Google Cloud calls.
+- **Runtime service account (`api-runtime`):** can read exactly its three secrets (database URL, Voyage key, Redis URL). It has no other roles; the API makes no Google Cloud calls.
 - **Deploy service account (`github-deploy`):** used by GitHub Actions through **Workload Identity Federation**. GitHub's OIDC token is exchanged for short-lived credentials, so no service account key exists anywhere. The pool provider only accepts tokens from `divij-pawar/trump-of-the-day` on `refs/heads/main`. Its permissions:
   - push to the one Artifact Registry repository;
   - `run.developer` on the one Cloud Run service;
   - project-level `run.viewer`, to poll deploy operations;
-  - act as `api-runtime` and no other service account;
-  - publish Firebase Hosting (project-level, because Hosting has no per-site IAM).
-- **Secrets** never enter Terraform state. Terraform creates each secret with a placeholder version, and you add the real value as a new version.
-- **The Cloud Run URL is public.** Firebase's rewrites call it anonymously, so that's required. Someone could call the `*.run.app` URL directly and skip the CDN. The rate limit and `max_instances` bound what that costs.
+  - act as `api-runtime` and no other service account.
+- **Secrets:** the database URL and Voyage key never enter Terraform state; Terraform creates each with a placeholder version and you add the real value. The Redis URL is the exception: Terraform creates the Upstash database, so it writes that secret itself, and the password is in state. That's why the state bucket is private and versioned.
+- **Upstash credentials** for Terraform come from `UPSTASH_EMAIL` / `UPSTASH_API_KEY` in the environment, never from files. `auto_scale = false` keeps the database on the free plan.
+- **The Cloud Run URL is public:** Netlify's proxy and browsers' WebSockets call it anonymously. Someone could call it directly and skip Netlify's CDN; the rate limit and `max_instances` bound what that costs, and `/ws` refuses other origins.
 
 ### Spending limits
 
-The free tier is **not a cap**. If traffic exceeds it, the extra is billed. Three limits keep that bounded:
+The free tier is **not a cap**. If traffic exceeds it, the extra is billed. These keep it bounded:
 - `max_instances` (default **2**): the hard ceiling on concurrent compute;
 - the per-IP rate limit in the API (300/min);
+- the WebSocket lifetime cap and visibility-based disconnects;
+- Upstash with `auto_scale = false`: at its quota it errors instead of upgrading, and the API falls back to the database;
 - the **budget alert** (default $5): emails at 50%, at 100%, and when the month is forecast to exceed it. It alerts but doesn't stop anything.
 
 ### Health checks
@@ -57,50 +63,51 @@ The free tier is **not a cap**. If traffic exceeds it, the extra is billed. Thre
 |---|---|---|
 | Cloud Run startup probe | `/healthz` | The new revision never takes traffic; the previous one keeps serving |
 | Cloud Run liveness probe | `/healthz` | The instance is restarted |
-| Uptime check (every 15 min, via Firebase) | `/healthz` | Email alert after about 20 minutes of failures |
+| Deploy smoke test (`deploy-gcp.yml`) | `/healthz`, `/readyz` | The workflow fails, so a broken deploy is visible |
+| Uptime check (every 15 min, Cloud Run URL) | `/healthz` | Email alert after about 20 minutes of failures |
 
-All three use `/healthz` because it doesn't touch the database. A probe on `/readyz` every few seconds would keep Neon awake around the clock and use up its free compute hours.
+The recurring checks use `/healthz` because it doesn't touch the database. A probe on `/readyz` every few seconds would keep Neon awake around the clock and use up its free compute hours.
 
 ### Client IPs on Cloud Run
 
-The per-IP rate limit needs the visitor's real address. Requests reach the container through Firebase Hosting and Google's front end, each of which appends to `X-Forwarded-For`. The service sets `TRUST_PROXY_HOPS=2`. To confirm it picks the visitor rather than a Google proxy, check `remoteAddress` in the API's request logs (Cloud Run → Logs) after visiting the site, and compare it with your own public IP. If it shows a Google address, adjust the variable in `main.tf`.
+The per-IP rate limit needs the visitor's real address. Requests through the site reach the container via Netlify's proxy and Google's front end, each of which appends to `X-Forwarded-For`, so the service sets `TRUST_PROXY_HOPS=2`. To confirm it picks the visitor rather than a proxy, check `remoteAddress` in the API's request logs (Cloud Run → Logs) after visiting the site, and compare it with your own public IP. If it shows a Netlify or Google address, adjust the variable in `main.tf`.
 
 ### First deploy
 
-1. **Project and tools.** Create a GCP project, link a billing account, and install `gcloud` and `terraform`. Then run `gcloud auth application-default login`.
-2. **State bucket.** Create a GCS bucket with versioning on, then copy `backend.hcl.example` to `backend.hcl` and fill it in.
-3. **Variables.** Create `terraform.tfvars`:
+1. **Database.** Bring Neon up to the current schema: run `db/migrations/002_dedupe_vector_digest.sql` from the pipeline repo with the owner connection string (take a Neon branch first; it deletes duplicate links), then `python insert_news.py rescore`, `backfill-embeddings` (if you have a Voyage key) and `enrich <start> <end>` for briefs on past days. See the pipeline's [docs/db.md](../trump-of-the-day-server/docs/db.md). Rotate the `news_readonly` password if it was ever in the old frontend bundle (`VITE_NEON_NEWS_URL`).
+2. **Accounts and tools.** Create a GCP project and link a billing account (Cloud Run requires one even inside the free tier). Create an Upstash account and a Management API key (console.upstash.com → Account → Management API). Install `gcloud` and `terraform`, then run `gcloud auth application-default login`.
+3. **State bucket.** Create a GCS bucket with versioning on, then copy `backend.hcl.example` to `backend.hcl` and fill it in.
+4. **Variables.** Create `terraform.tfvars`:
    ```hcl
    project_id         = "my-project"
-   hosting_site_id    = "trump-of-the-day-xyz"   # globally unique
-   billing_account_id = "XXXXXX-XXXXXX-XXXXXX"   # for the budget alert
+   site_origins       = ["https://your-site.netlify.app"]   # plus any custom domain
+   billing_account_id = "XXXXXX-XXXXXX-XXXXXX"              # for the budget alert
    alert_email        = "you@example.com"
    ```
-4. **Apply.** The service starts on Google's hello-world image until CI pushes the real one.
+5. **Apply.** The service starts on Google's hello-world image until CI pushes the real one.
    ```bash
    cd infra/gcp
+   export UPSTASH_EMAIL=you@example.com UPSTASH_API_KEY=…
    terraform init -backend-config=backend.hcl
    terraform apply
    ```
-5. **Database.** Bring Neon up to the current schema before anything reads it: run `db/migrations/002_dedupe_vector_digest.sql` from the pipeline repo with the owner connection string (take a Neon branch first; it deletes duplicate links), then `python insert_news.py rescore`, `backfill-embeddings` (if you have a Voyage key) and `enrich <start> <end>` for briefs on past days. See the pipeline's [docs/db.md](../trump-of-the-day-server/docs/db.md). Rotate the `news_readonly` password if it was ever in the old frontend bundle (`VITE_NEON_NEWS_URL`).
-6. **Secrets.** Add the real values; they become the `latest` version.
+6. **Secrets.** Add the real values; they become the `latest` version. (The Redis URL is already set.)
    ```bash
    printf '%s' 'postgresql://news_readonly:…@ep-…-pooler.….neon.tech/neondb?sslmode=require' \
      | gcloud secrets versions add trump-of-the-day-api-database-url --data-file=-
    printf '%s' 'pa-…' | gcloud secrets versions add trump-of-the-day-api-voyage-api-key --data-file=-
    ```
-   Leave the Voyage one as is if you don't want search; the API treats the placeholder as "not configured". Don't add `DATABASE_URL_DIRECT`. Without it, Neon can sleep and live updates are off.
-7. **GitHub variables.** Set `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT`, `GCP_IMAGE_REPOSITORY` and `FIREBASE_SITE_ID` from `terraform output`. Then run **Deploy (GCP)**, or push to `main`.
-8. **Pipeline secrets.** In the pipeline repo (Settings → Secrets and variables → Actions), add `DATABASE_URL` (owner role), `OPENROUTER_API_KEY` (free daily brief) and optionally `VOYAGE_API_KEY`. Push the pipeline repo before this one, since this repo's submodule pointer must exist there for CI to check it out.
-9. **Custom domain (optional).** Add it in the Firebase console under Hosting → Add custom domain. Firebase issues the certificate.
-
-`firebase.json` hard-codes the Cloud Run service name and region. If you change `service_name` or `region` in Terraform, change them there too.
+   Leave the Voyage one as is if you don't want search; the API treats the placeholder as "not configured".
+7. **GitHub variables (this repo).** Set `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT` and `GCP_IMAGE_REPOSITORY` from `terraform output`, then run **Deploy (GCP)**. Check `curl $(terraform output -raw api_url)/readyz` returns `"status":"ready"`.
+8. **Pipeline secrets.** In the pipeline repo (Settings → Secrets and variables → Actions): `DATABASE_URL` (owner role), `OPENROUTER_API_KEY`, optionally `VOYAGE_API_KEY`, and for live updates `UPSTASH_REDIS_REST_URL` (`terraform output upstash_rest_url`) and `UPSTASH_REDIS_REST_TOKEN` (`terraform output -raw upstash_rest_token`).
+9. **Netlify.** In the site's environment variables set `API_ORIGIN` and `VITE_WS_URL` from `terraform output netlify_env`, and delete `VITE_NEON_NEWS_URL`. Only then push this repo: Netlify's build fails without `API_ORIGIN`, so it can't publish a site with no API behind it. The submodule URL is HTTPS, so Netlify can clone it without a key.
+10. **Order of pushes.** Push the pipeline repo before this one, since this repo's submodule pointer must exist there for Netlify and CI to check it out.
 
 ### Known limits
 
-- **Cold starts:** the first request after an idle period takes about 1–2 s longer while Cloud Run starts an instance, plus about 0.5 s if Neon was asleep. Setting `min_instance_count = 1` removes this, but it costs money.
-- **No WebSockets** on this stack (see above). Pages pick up new stories on the next load or refresh.
-- **The cache is per instance** and is lost on scale-to-zero. The Firebase CDN does most of the caching. For a shared cache, set `REDIS_URL` to an Upstash free-tier database; the API uses it automatically.
+- **Cold starts:** the first request after an idle period takes about 1–2 s longer while Cloud Run starts an instance, plus about 0.5 s if Neon was asleep. Netlify's CDN and the Redis cache absorb most of them. Setting `min_instance_count = 1` removes this, but it costs money.
+- **Netlify deploys the site on push, independently of CI.** The site and the API can be briefly out of step during a deploy; keep API changes backward compatible.
+- **Upstash free plan:** 500k commands a month. Each API request uses about three (cache read, rate limit), so roughly 150k requests a month before it starts erroring; the API then serves from the database without the shared cache.
 
 ---
 

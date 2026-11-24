@@ -2,21 +2,21 @@
 
 Estimates as of 2026-11. Free tiers and prices change, so check each provider's pricing page before relying on these.
 
-## Live site (GCP): about $0/month
+## Production (Netlify + GCP + Upstash): about $0/month
 
 | Service | Provider | What it does here | Free allowance (approx.) | Expected use | Cost |
 |---|---|---|---|---|---|
-| API | Cloud Run | Runs the Fastify container, scales to zero | ~2M requests and a few hundred thousand vCPU-seconds per month | Most requests are served by the CDN first | $0 |
-| Frontend and CDN | Firebase Hosting | Serves the SPA; routes `/api/*` to Cloud Run and caches the responses | ~10 GB storage, ~10 GB/month transfer | ~250 KB per visit | $0 |
-| Cache | In-process (`MemoryCache`) plus the Firebase CDN | | | | $0 |
-| Database | Neon | Postgres + pgvector | Free plan | Can sleep because live updates are off and health checks skip the database | $0 |
-| Secrets | Secret Manager | 2 secrets | A few active versions and ~10k accesses/month free | | $0 |
+| API | Cloud Run | Runs the Fastify container, scales to zero | ~2M requests, 180k vCPU-seconds and 360k GiB-seconds per month | Short HTTP requests plus open WebSockets, which are billed while connected; capped at 10 minutes and dropped a minute after a tab is hidden | $0 |
+| Frontend and CDN | Netlify | Serves the SPA; proxies `/api/*` to Cloud Run | 100 GB/month bandwidth, 300 build minutes | ~250 KB per visit; ~1 min per build | $0 |
+| Cache, rate limits, live-update channel | Upstash Redis | Shared response cache, rate-limit counters, `news_updated` pub/sub | 256 MB, 500k commands/month | ~3 commands per API request (~150k requests/month) | $0 |
+| Database | Neon | Postgres + pgvector | Free plan | Can sleep: live updates go through Redis, not a held `LISTEN` connection, and health checks skip the database | $0 |
+| Secrets | Secret Manager | 3 secrets | A few active versions and ~10k accesses/month free | | $0 |
 | Images | Artifact Registry | API images | 0.5 GB | 5 images × ~60 MB, kept there by the cleanup policy | $0 |
 | Monitoring | Cloud Monitoring / Logging | Uptime check, alert, logs | Basic uptime checks; 50 GB logs/month | | $0 |
 | CI/CD and daily scraper | GitHub Actions | Tests, deploys, 14:00 UTC cron | Free for public repos; 2,000 min/month for private ones | ~5 min/day plus CI | $0 |
 | Daily brief | OpenRouter Free Router (`openrouter/free`) | One to three requests per brief (retries when a model runs out of tokens); the site shows which free model wrote it | Free models are rate-limited per day (about 50 requests without credits); a daily job needs at most 6 (yesterday and today) | | $0 |
 | Embeddings | Voyage `voyage-3.5` | Search and related coverage | Large free token allowance for new accounts | ~1M tokens/month (~$0.06 if paid) | ~$0 |
-| Domain | Firebase `*.web.app` | | | | $0 (a custom domain is ~$10–12/year) |
+| Domain | Netlify `*.netlify.app` | | | | $0 (a custom domain is ~$10–12/year) |
 
 **Worst case.** Cloud Run can't run more than `max_instances` (2) instances. If a bot kept both fully busy all month, compute would come to tens of dollars. The budget alert emails you well before that.
 
