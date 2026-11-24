@@ -1,11 +1,10 @@
-# Deploys the live site after CI passes on main: the API image to Cloud Run and
-# the frontend to Firebase Hosting (which routes /api/* to Cloud Run, see
-# firebase.json).
+# Deploys the API to Cloud Run after CI passes on main. The website is built and
+# published by Netlify on its own (netlify.toml), which proxies /api/* to Cloud Run.
 #
 # Authenticates with Workload Identity Federation (no service account keys).
 # Inert until these repository variables are set from `terraform output` in infra/gcp:
 #   GCP_PROJECT_ID, GCP_REGION, GCP_WORKLOAD_IDENTITY_PROVIDER,
-#   GCP_DEPLOY_SERVICE_ACCOUNT, GCP_IMAGE_REPOSITORY, FIREBASE_SITE_ID
+#   GCP_DEPLOY_SERVICE_ACCOUNT, GCP_IMAGE_REPOSITORY
 name: Deploy (GCP)
 
 on:
@@ -63,23 +62,11 @@ jobs:
             --image "${{ steps.image.outputs.uri }}" \
             --quiet
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Build the frontend
-        # No WebSockets on GCP: Firebase Hosting can't proxy them and the API runs
-        # without the LISTEN connection there.
-        env:
-          VITE_LIVE_UPDATES: "false"
-        run: npm ci && npm run build
-
-      - name: Deploy to Firebase Hosting
-        env:
-          SITE: ${{ vars.FIREBASE_SITE_ID }}
+      # Cloud Run only shifts traffic once the startup probe passes; this checks
+      # the public URL end to end, including the database through /readyz.
+      - name: Smoke test
         run: |
-          jq '.hosting.site = env.SITE' firebase.json > firebase.deploy.json
-          mv firebase.deploy.json firebase.json
-          npx --yes firebase-tools@13 deploy --only hosting \
-            --project "${{ vars.GCP_PROJECT_ID }}" --non-interactive
+          url=$(gcloud run services describe "$SERVICE" --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ vars.GCP_REGION }}" --format 'value(status.url)')
+          curl -fsS --retry 5 --retry-all-errors --max-time 30 "$url/healthz"
+          curl -fsS --retry 5 --retry-all-errors --max-time 30 "$url/readyz"

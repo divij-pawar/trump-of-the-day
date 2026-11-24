@@ -29,7 +29,7 @@ resource "google_iam_workload_identity_pool_provider" "github" {
 resource "google_service_account" "deploy" {
   account_id   = "github-deploy"
   display_name = "GitHub Actions deploy"
-  description  = "Pushes API images, rolls the Cloud Run service, publishes Firebase Hosting."
+  description  = "Pushes API images and rolls the Cloud Run service."
 }
 
 resource "google_service_account_iam_member" "deploy_via_wif" {
@@ -67,16 +67,4 @@ resource "google_service_account_iam_member" "deploy_acts_as_runtime" {
   service_account_id = google_service_account.api.name
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.deploy.email}"
-}
-
-# Firebase Hosting has no per-site IAM, so these are project-level.
-resource "google_project_iam_member" "deploy_hosting" {
-  for_each = toset([
-    "roles/firebasehosting.admin",
-    "roles/firebase.viewer",
-    "roles/serviceusage.serviceUsageConsumer",
-  ])
-  project = var.project_id
-  role    = each.value
-  member  = "serviceAccount:${google_service_account.deploy.email}"
 }

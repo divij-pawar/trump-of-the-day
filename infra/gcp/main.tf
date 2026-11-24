@@ -5,8 +5,6 @@ locals {
     "artifactregistry.googleapis.com",
     "billingbudgets.googleapis.com",
     "cloudresourcemanager.googleapis.com",
-    "firebase.googleapis.com",
-    "firebasehosting.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
     "monitoring.googleapis.com",
@@ -92,12 +90,57 @@ resource "google_secret_manager_secret_version" "placeholder" {
 resource "google_service_account" "api" {
   account_id   = "api-runtime"
   display_name = "API runtime (Cloud Run)"
-  description  = "Identity of the running API. Can read its own two secrets and nothing else."
+  description  = "Identity of the running API. Can read its own three secrets and nothing else."
 }
 
 resource "google_secret_manager_secret_iam_member" "api_reads_secret" {
   for_each  = google_secret_manager_secret.app
   secret_id = each.value.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.api.email}"
+}
+
+# --- Redis (Upstash) --------------------------------------------------------------
+
+# Serverless Redis on Upstash's free plan (256 MB, 500k commands/month): the
+# response cache, rate-limit counters shared across instances, and the pub/sub
+# channel the pipeline announces new stories on. Upstash runs on AWS; us-east-1
+# is the closest region to us-central1 (~20 ms).
+resource "upstash_redis_database" "cache" {
+  database_name  = var.service_name
+  region         = "global"
+  primary_region = var.upstash_primary_region
+  tls            = true
+  # It's a cache: evict old keys instead of erroring when full.
+  eviction = true
+  # Never move to a paid plan on its own when a quota is hit.
+  auto_scale = false
+}
+
+locals {
+  redis_url = "rediss://default:${upstash_redis_database.cache.password}@${upstash_redis_database.cache.endpoint}:${upstash_redis_database.cache.port}"
+}
+
+# Unlike the other secrets, Terraform writes this one, since it creates the
+# database the value comes from. That puts the password in Terraform state,
+# which is why the state bucket is private and versioned.
+resource "google_secret_manager_secret" "redis_url" {
+  secret_id = "${var.service_name}-redis-url"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.enabled]
+}
+
+resource "google_secret_manager_secret_version" "redis_url" {
+  secret      = google_secret_manager_secret.redis_url.id
+  secret_data = local.redis_url
+}
+
+resource "google_secret_manager_secret_iam_member" "api_reads_redis_url" {
+  secret_id = google_secret_manager_secret.redis_url.id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.api.email}"
 }
@@ -109,9 +152,13 @@ resource "google_cloud_run_v2_service" "api" {
   deletion_protection = false
 
   template {
-    service_account                  = google_service_account.api.email
-    max_instance_request_concurrency = 80
-    timeout                          = "30s"
+    service_account = google_service_account.api.email
+    # Each open WebSocket counts as one in-flight request, so allow plenty per
+    # instance; Node handles thousands of idle sockets.
+    max_instance_request_concurrency = 250
+    # The request timeout also caps WebSocket connections. The API closes them
+    # itself after WS_MAX_SECONDS, well before this.
+    timeout = "3600s"
 
     # Scale to zero when idle (that's what keeps this in the free tier) and never
     # above max_instances, which bounds the worst-case bill.
@@ -141,11 +188,35 @@ resource "google_cloud_run_v2_service" "api" {
         name  = "RATE_LIMIT_MAX"
         value = tostring(var.rate_limit_per_minute)
       }
-      # Firebase Hosting -> Google Front End -> container. See docs/infrastructure.md
+      # Netlify proxy -> Google Front End -> container. See docs/infrastructure.md
       # ("Client IPs on Cloud Run") for how to confirm this from the request logs.
       env {
         name  = "TRUST_PROXY_HOPS"
         value = "2"
+      }
+      # Live updates: the pipeline PUBLISHes to Redis, every instance subscribes.
+      env {
+        name  = "LIVE_UPDATES"
+        value = "redis"
+      }
+      # An open WebSocket is billed for its whole duration; close after 10 minutes
+      # and let visible tabs reconnect.
+      env {
+        name  = "WS_MAX_SECONDS"
+        value = tostring(var.ws_max_seconds)
+      }
+      env {
+        name  = "WS_ALLOWED_ORIGINS"
+        value = join(",", var.site_origins)
+      }
+      env {
+        name = "REDIS_URL"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.redis_url.secret_id
+            version = "latest"
+          }
+        }
       }
       env {
         name = "DATABASE_URL"
@@ -194,29 +265,16 @@ resource "google_cloud_run_v2_service" "api" {
   depends_on = [
     google_project_service.enabled,
     google_secret_manager_secret_iam_member.api_reads_secret,
+    google_secret_manager_secret_iam_member.api_reads_redis_url,
     google_secret_manager_secret_version.placeholder,
+    google_secret_manager_secret_version.redis_url,
   ]
 }
 
-# Public: Firebase Hosting's rewrites call the service as an anonymous client.
+# Public: Netlify's /api proxy and browsers' WebSocket connections call it anonymously.
 resource "google_cloud_run_v2_service_iam_member" "public" {
   name     = google_cloud_run_v2_service.api.name
   location = google_cloud_run_v2_service.api.location
   role     = "roles/run.invoker"
   member   = "allUsers"
-}
-
-# --- Firebase Hosting ----------------------------------------------------------
-
-resource "google_firebase_project" "this" {
-  provider   = google-beta
-  project    = var.project_id
-  depends_on = [google_project_service.enabled]
-}
-
-resource "google_firebase_hosting_site" "site" {
-  provider   = google-beta
-  project    = var.project_id
-  site_id    = var.hosting_site_id
-  depends_on = [google_firebase_project.this]
 }

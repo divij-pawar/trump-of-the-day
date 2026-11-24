@@ -45,7 +45,7 @@ resource "google_billing_budget" "monthly" {
   depends_on = [google_project_service.enabled]
 }
 
-# Every 15 minutes, through Firebase Hosting, against /healthz. That path doesn't
+# Every 15 minutes, against the Cloud Run service's /healthz. That path doesn't
 # touch the database, so the checks don't keep Neon from sleeping.
 resource "google_monitoring_uptime_check_config" "site" {
   display_name = "${var.service_name} healthz"
@@ -63,7 +63,7 @@ resource "google_monitoring_uptime_check_config" "site" {
     type = "uptime_url"
     labels = {
       project_id = var.project_id
-      host       = "${var.hosting_site_id}.web.app"
+      host       = trimprefix(google_cloud_run_v2_service.api.uri, "https://")
     }
   }
 

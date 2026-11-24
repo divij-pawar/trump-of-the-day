@@ -6,9 +6,9 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 6.10"
     }
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = "~> 6.10"
+    upstash = {
+      source  = "upstash/upstash"
+      version = "~> 1.5"
     }
   }
 
@@ -26,9 +26,6 @@ provider "google" {
   billing_project       = var.project_id
 }
 
-provider "google-beta" {
-  project               = var.project_id
-  region                = var.region
-  user_project_override = true
-  billing_project       = var.project_id
-}
+# Credentials come from the environment, so they never land in tfvars:
+#   export UPSTASH_EMAIL=you@example.com UPSTASH_API_KEY=…   (console.upstash.com → Account → Management API)
+provider "upstash" {}

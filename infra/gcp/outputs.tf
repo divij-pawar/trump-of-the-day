@@ -1,10 +1,25 @@
-output "site_url" {
-  value = "https://${google_firebase_hosting_site.site.site_id}.web.app"
+output "api_url" {
+  description = "Cloud Run URL. Set as API_ORIGIN in Netlify, and wss://<host>/ws as VITE_WS_URL."
+  value       = google_cloud_run_v2_service.api.uri
 }
 
-output "cloud_run_url" {
-  description = "Direct service URL (bypasses the Firebase CDN; useful for debugging)."
-  value       = google_cloud_run_v2_service.api.uri
+output "netlify_env" {
+  description = "Environment variables for the Netlify site."
+  value = {
+    API_ORIGIN  = google_cloud_run_v2_service.api.uri
+    VITE_WS_URL = "${replace(google_cloud_run_v2_service.api.uri, "https://", "wss://")}/ws"
+  }
+}
+
+output "upstash_rest_url" {
+  description = "Set as the UPSTASH_REDIS_REST_URL secret in the pipeline repo."
+  value       = "https://${upstash_redis_database.cache.endpoint}"
+}
+
+output "upstash_rest_token" {
+  description = "Set as the UPSTASH_REDIS_REST_TOKEN secret in the pipeline repo (terraform output -raw upstash_rest_token)."
+  value       = upstash_redis_database.cache.rest_token
+  sensitive   = true
 }
 
 output "image_repository" {
@@ -24,5 +39,5 @@ output "deploy_service_account" {
 
 output "secrets_to_populate" {
   description = "Add real values with: gcloud secrets versions add <name> --data-file=-"
-  value       = [for s in google_secret_manager_secret.app : s.secret_id]
+  value       = [for s in google_secret_manager_secret.app : s.secret_id] # redis-url is written by Terraform
 }

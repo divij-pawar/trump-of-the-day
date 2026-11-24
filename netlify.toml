@@ -1,0 +1,23 @@
+# Netlify serves the site; the API runs on Cloud Run (infra/gcp).
+# Site environment variables (Site configuration → Environment variables):
+#   API_ORIGIN    https://<cloud run host>         /api/* is proxied there (build fails if unset)
+#   VITE_WS_URL   wss://<cloud run host>/ws        Netlify can't proxy WebSockets
+# Delete the old VITE_NEON_NEWS_URL variable: the site no longer talks to the database.
+[build]
+  command = "npm run build && node scripts/netlify-redirects.mjs"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Hashed asset filenames never change, so cache them for a year.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

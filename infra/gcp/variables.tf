@@ -14,9 +14,21 @@ variable "service_name" {
   default = "trump-of-the-day-api"
 }
 
-variable "hosting_site_id" {
-  description = "Firebase Hosting site id; the site is served at https://<id>.web.app. Must be globally unique."
+variable "site_origins" {
+  description = "Origins of the website (Netlify site and any custom domain). Browsers from these may open the /ws WebSocket; others get 403."
+  type        = list(string)
+}
+
+variable "ws_max_seconds" {
+  description = "The API closes each WebSocket after this many seconds; visible tabs reconnect. Bounds what an idle tab costs on Cloud Run."
+  type        = number
+  default     = 600
+}
+
+variable "upstash_primary_region" {
+  description = "Upstash Redis region (AWS regions only); us-east-1 is closest to us-central1."
   type        = string
+  default     = "us-east-1"
 }
 
 variable "github_repository" {
