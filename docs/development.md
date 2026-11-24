@@ -105,7 +105,7 @@ Push the submodule commit before the parent commit that references it. Otherwise
   - frontend: typecheck, lint, test, build;
   - API: typecheck, test, Docker build;
   - Terraform: fmt and validate, for both `infra/gcp` and `infra/aws`.
-- `.github/workflows/deploy-gcp.yml` deploys the API after CI passes on `main`: it pushes the image to Artifact Registry, rolls Cloud Run and smoke-tests `/healthz` and `/readyz`. It authenticates through Workload Identity Federation and does nothing until the `GCP_*` repository variables exist.
+- `.github/workflows/deploy-gcp.yml` deploys the API after CI passes on `main`: it pushes the image to Artifact Registry, rolls Cloud Run and smoke-tests `/livez` and `/readyz`. It authenticates through Workload Identity Federation and does nothing until the `GCP_*` repository variables exist.
 - Netlify builds and publishes the site on every push to `main` (`netlify.toml`), and refuses to publish without `API_ORIGIN`.
 - `.github/workflows/deploy-aws.yml` is manual only, for when the AWS stack is up ([infrastructure.md](infrastructure.md)).
 - The pipeline repo has its own `test.yml`, `build-push.yml` and `daily-run.yml`.

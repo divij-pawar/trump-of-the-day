@@ -63,10 +63,10 @@ The free tier is **not a cap**. If traffic exceeds it, the extra is billed. Thes
 |---|---|---|
 | Cloud Run startup probe | `/healthz` | The new revision never takes traffic; the previous one keeps serving |
 | Cloud Run liveness probe | `/healthz` | The instance is restarted |
-| Deploy smoke test (`deploy-gcp.yml`) | `/healthz`, `/readyz` | The workflow fails, so a broken deploy is visible |
-| Uptime check (every 15 min, Cloud Run URL) | `/healthz` | Email alert after about 20 minutes of failures |
+| Deploy smoke test (`deploy-gcp.yml`) | `/livez`, `/readyz` | The workflow fails, so a broken deploy is visible |
+| Uptime check (every 15 min, Cloud Run URL) | `/livez` | Email alert after about 20 minutes of failures |
 
-The recurring checks use `/healthz` because it doesn't touch the database. A probe on `/readyz` every few seconds would keep Neon awake around the clock and use up its free compute hours.
+The recurring checks use `/livez` because it doesn't touch the database. A probe on `/readyz` every few seconds would keep Neon awake around the clock and use up its free compute hours. `/livez` is the same check as `/healthz`; the public checks can't use `/healthz` because Cloud Run's front end answers that path itself with a 404 (only its own probes, which go straight to the container, reach it).
 
 ### Client IPs on Cloud Run
 

@@ -94,6 +94,14 @@ describe("health", () => {
     expect(res.statusCode).toBe(200);
   });
 
+  it("/livez is the same check, reachable on Cloud Run's public URL", async () => {
+    const repo = fakeRepo({ ping: vi.fn(async () => Promise.reject(new Error("down"))) });
+    const { app } = await setup({ repo });
+    const res = await app.inject("/livez");
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ status: "ok" });
+  });
+
   it("/readyz fails when the database is down", async () => {
     const repo = fakeRepo({ ping: vi.fn(async () => Promise.reject(new Error("down"))) });
     const { app } = await setup({ repo });

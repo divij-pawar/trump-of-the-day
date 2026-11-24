@@ -40,6 +40,9 @@ Semantic search across the archive. `q` is 2 to 200 characters and is lowercased
 ### `GET /healthz`
 Liveness: `{"status":"ok"}` whenever the process is serving. It has no dependencies, so a database outage doesn't make ECS restart healthy tasks. Used by the container `HEALTHCHECK`.
 
+### `GET /livez`
+The same check as `/healthz`. Use it for anything that calls the API from outside Cloud Run (the uptime check, the deploy smoke test): Cloud Run's front end answers `/healthz` itself with a 404, so only its own probes can reach that path.
+
 ### `GET /readyz`
 Readiness: `200` if Postgres answers, else `503`. Used by the ALB target group.
 

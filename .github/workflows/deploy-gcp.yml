@@ -68,5 +68,5 @@ jobs:
         run: |
           url=$(gcloud run services describe "$SERVICE" --project "${{ vars.GCP_PROJECT_ID }}" \
             --region "${{ vars.GCP_REGION }}" --format 'value(status.url)')
-          curl -fsS --retry 5 --retry-all-errors --max-time 30 "$url/healthz"
+          curl -fsS --retry 5 --retry-all-errors --max-time 30 "$url/livez"
           curl -fsS --retry 5 --retry-all-errors --max-time 30 "$url/readyz"

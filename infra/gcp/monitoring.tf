@@ -45,15 +45,16 @@ resource "google_billing_budget" "monthly" {
   depends_on = [google_project_service.enabled]
 }
 
-# Every 15 minutes, against the Cloud Run service's /healthz. That path doesn't
-# touch the database, so the checks don't keep Neon from sleeping.
+# Every 15 minutes, against the Cloud Run service's /livez. That path doesn't
+# touch the database, so the checks don't keep Neon from sleeping. (Not /healthz:
+# Cloud Run's front end answers that one itself with a 404.)
 resource "google_monitoring_uptime_check_config" "site" {
-  display_name = "${var.service_name} healthz"
+  display_name = "${var.service_name} livez"
   timeout      = "10s"
   period       = "900s"
 
   http_check {
-    path         = "/healthz"
+    path         = "/livez"
     port         = 443
     use_ssl      = true
     validate_ssl = true

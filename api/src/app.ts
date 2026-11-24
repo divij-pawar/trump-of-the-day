@@ -78,7 +78,7 @@ export async function buildApp(
   if (deps.originVerifySecret) {
     const secret = deps.originVerifySecret;
     app.addHook("onRequest", async (req, reply) => {
-      if (req.url === "/healthz" || req.url === "/readyz") return;
+      if (req.url === "/healthz" || req.url === "/livez" || req.url === "/readyz") return;
       if (req.headers["x-origin-verify"] !== secret) {
         return reply.status(403).send({ error: "forbidden" });
       }
@@ -95,7 +95,12 @@ export async function buildApp(
   });
   await app.register(websocket, { options: { maxPayload: 1024 } });
 
-  app.get("/healthz", { config: { rateLimit: false } }, async () => ({ status: "ok" }));
+  // Cloud Run's front end answers /healthz itself with a 404 for outside requests (only
+  // its own probes reach the container), so /livez is the same check for the uptime
+  // check and the deploy smoke test.
+  const live = async () => ({ status: "ok" });
+  app.get("/healthz", { config: { rateLimit: false } }, live);
+  app.get("/livez", { config: { rateLimit: false } }, live);
 
   app.get("/readyz", { config: { rateLimit: false } }, async (_req, reply) => {
     const [db, redis] = await Promise.all([
