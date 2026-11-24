@@ -23,7 +23,13 @@ const explainUnreachableApi: ProxyOptions['configure'] = (proxy) => {
 export default defineConfig({
   plugins: [react()],
   server: {
-    // Mirrors the production CloudFront routing, so the app always talks to its own origin.
+    // Only src/ and the root config are frontend code. Watching the rest (the
+    // pipeline's Python env/, api/, Terraform providers) can use up the OS's file
+    // watch limit (ENOSPC) and crash the dev server.
+    watch: {
+      ignored: ['**/trump-of-the-day-server/**', '**/api/**', '**/infra/**', '**/loadtest/**', '**/dist/**'],
+    },
+    // Mirrors the production routing, so the app always talks to its own origin.
     proxy: {
       '/api': { target: apiTarget, configure: explainUnreachableApi },
       '/ws': { target: apiTarget.replace(/^http/, 'ws'), ws: true },

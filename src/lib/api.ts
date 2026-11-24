@@ -77,6 +77,8 @@ export const api = {
 };
 
 export function websocketUrl(): string {
+  // Netlify proxies /api but not WebSockets, so production points /ws straight at the API.
+  if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
   if (API_BASE) return `${API_BASE.replace(/^http/, "ws")}/ws`;
   const { protocol, host } = window.location;
   return `${protocol === "https:" ? "wss" : "ws"}://${host}/ws`;
