@@ -238,3 +238,57 @@ describe("MemoryCache", () => {
     expect(load).toHaveBeenCalledTimes(4);
   });
 });
+
+describe("WebSocket", () => {
+  it("refuses origins outside WS_ALLOWED_ORIGINS before upgrading", async () => {
+    const { app } = await setup({ wsAllowedOrigins: ["https://site.test"] });
+    const res = await app.inject({
+      url: "/ws",
+      headers: { origin: "https://evil.test", connection: "upgrade", upgrade: "websocket" },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it("accepts an allowed origin and closes the connection at its maximum lifetime", async () => {
+    const { app, hub } = await setup({ wsAllowedOrigins: ["https://site.test"], wsMaxSeconds: 1 });
+    await app.ready();
+    const ws = await app.injectWS("/ws", { headers: { origin: "https://site.test" } });
+    expect(hub.size).toBe(1);
+    const code = await new Promise<number>((resolve) => ws.once("close", (c) => resolve(c)));
+    expect(code).toBe(4000);
+    await vi.waitFor(() => expect(hub.size).toBe(0));
+  });
+});
+
+describe("loadConfig live updates", () => {
+  const env = { ...process.env };
+  afterEach(() => {
+    process.env = { ...env };
+  });
+
+  it("defaults to Postgres LISTEN when DATABASE_URL_DIRECT is set, else Redis, else off", async () => {
+    const { loadConfig } = await import("../src/config.js");
+    process.env = { DATABASE_URL: "postgres://x", REDIS_URL: "redis://r" };
+    expect(loadConfig().liveUpdates).toBe("redis");
+    process.env.DATABASE_URL_DIRECT = "postgres://direct";
+    expect(loadConfig().liveUpdates).toBe("postgres");
+    process.env = { DATABASE_URL: "postgres://x", REDIS_URL: "unset" };
+    expect(loadConfig().liveUpdates).toBe("off");
+  });
+
+  it("honors LIVE_UPDATES and parses allowed origins", async () => {
+    const { loadConfig } = await import("../src/config.js");
+    process.env = {
+      DATABASE_URL: "postgres://x",
+      REDIS_URL: "redis://r",
+      DATABASE_URL_DIRECT: "postgres://direct",
+      LIVE_UPDATES: "redis",
+      WS_ALLOWED_ORIGINS: "https://a.test/, https://b.test",
+    };
+    const config = loadConfig();
+    expect(config.liveUpdates).toBe("redis");
+    expect(config.wsAllowedOrigins).toEqual(["https://a.test", "https://b.test"]);
+    process.env.LIVE_UPDATES = "pubsub";
+    expect(() => loadConfig()).toThrow(/LIVE_UPDATES/);
+  });
+});

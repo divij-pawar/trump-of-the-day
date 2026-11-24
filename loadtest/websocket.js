@@ -14,6 +14,8 @@ const BASE_URL = __ENV.BASE_URL || "http://localhost:8080";
 const WS_URL = BASE_URL.replace(/^http/, "ws") + "/ws";
 const CONNECTIONS = Number(__ENV.CONNECTIONS || 1000);
 const HOLD_SECONDS = Number(__ENV.HOLD_SECONDS || 60);
+// The API only accepts WebSockets from the site's origins (WS_ALLOWED_ORIGINS).
+const ORIGIN = __ENV.ORIGIN || "http://localhost:5173";
 
 const rtt = new Trend("ws_ping_rtt", true);
 const updates = new Counter("ws_news_updates_received");
@@ -41,7 +43,7 @@ export const options = {
 };
 
 export default function () {
-  const res = ws.connect(WS_URL, {}, (socket) => {
+  const res = ws.connect(WS_URL, { headers: { Origin: ORIGIN } }, (socket) => {
     socket.on("open", () => {
       socket.setInterval(() => {
         socket.send(JSON.stringify({ type: "ping", t: Date.now() }));

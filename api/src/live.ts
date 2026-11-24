@@ -1,10 +1,72 @@
 import pg from "pg";
+import { Redis } from "ioredis";
 import type { FastifyBaseLogger } from "fastify";
 
-/** Postgres channel the pipeline NOTIFYs after inserting a day's rows (payload: "YYYY-MM-DD"). */
+/**
+ * Channel the pipeline announces a processed day on (payload: "YYYY-MM-DD"): a
+ * Postgres NOTIFY channel and, under the same name, a Redis pub/sub channel.
+ */
 export const NEWS_CHANNEL = "news_updated";
 
 export type NewsUpdatedHandler = (date: string) => void | Promise<void>;
+
+/** Where this replica hears about pipeline updates from. */
+export interface UpdateSource {
+  readonly connected: boolean;
+  start(): Promise<void>;
+  stop(): Promise<void>;
+}
+
+const DATE_PAYLOAD = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Subscribes to the pipeline's Redis pub/sub channel. Every replica subscribes, so
+ * one PUBLISH reaches all of them and each pushes to its own WebSocket clients:
+ * the usual way to fan WebSocket messages out across horizontally scaled servers.
+ * Unlike Postgres LISTEN it doesn't hold a database connection open, so a
+ * serverless database (Neon) can still scale to zero.
+ *
+ * Subscriber mode needs its own connection; ioredis reconnects and resubscribes
+ * on its own.
+ */
+export class RedisNewsSubscriber implements UpdateSource {
+  private client: Redis | null = null;
+
+  constructor(
+    private readonly url: string,
+    private readonly onUpdate: NewsUpdatedHandler,
+    private readonly log: FastifyBaseLogger,
+  ) {}
+
+  get connected(): boolean {
+    return this.client?.status === "ready";
+  }
+
+  async start(): Promise<void> {
+    const client = new Redis(this.url, { maxRetriesPerRequest: null, connectTimeout: 5_000 });
+    client.on("error", (err: Error) => this.log.warn({ err }, "redis subscriber error"));
+    client.on("message", (channel: string, payload: string) => {
+      if (channel !== NEWS_CHANNEL || !DATE_PAYLOAD.test(payload)) return;
+      Promise.resolve(this.onUpdate(payload)).catch((err) =>
+        this.log.error({ err }, "news update handler failed"),
+      );
+    });
+    this.client = client;
+    try {
+      await client.subscribe(NEWS_CHANNEL);
+      this.log.info("subscribed to news updates (redis)");
+    } catch (err) {
+      // ioredis keeps retrying and resubscribes once connected.
+      this.log.warn({ err }, "redis subscribe failed; will retry");
+    }
+  }
+
+  async stop(): Promise<void> {
+    const client = this.client;
+    this.client = null;
+    if (client) await client.quit().catch(() => client.disconnect());
+  }
+}
 
 /**
  * Holds one dedicated (non-pooled) connection that LISTENs for pipeline updates,
@@ -12,7 +74,7 @@ export type NewsUpdatedHandler = (date: string) => void | Promise<void>;
  * so each one invalidates its cache keys and pushes to its own WebSocket clients
  * without needing a separate fan-out channel.
  */
-export class NewsListener {
+export class NewsListener implements UpdateSource {
   private client: pg.Client | null = null;
   private stopped = false;
   private retryDelayMs = 1_000;
@@ -37,7 +99,7 @@ export class NewsListener {
     if (this.stopped) return;
     const client = new pg.Client({ connectionString: this.connectionString });
     client.on("notification", (msg) => {
-      if (msg.channel !== NEWS_CHANNEL || !msg.payload) return;
+      if (msg.channel !== NEWS_CHANNEL || !msg.payload || !DATE_PAYLOAD.test(msg.payload)) return;
       Promise.resolve(this.onUpdate(msg.payload)).catch((err) =>
         this.log.error({ err }, "news update handler failed"),
       );

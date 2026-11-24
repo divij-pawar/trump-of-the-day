@@ -4,7 +4,7 @@ import { MemoryCache, RedisCache, type Cache } from "./cache.js";
 import { loadConfig } from "./config.js";
 import { PgNewsRepository } from "./db.js";
 import { voyageEmbedder } from "./embeddings.js";
-import { NewsListener } from "./live.js";
+import { NewsListener, RedisNewsSubscriber, type UpdateSource } from "./live.js";
 
 const config = loadConfig();
 const log = pino({ level: config.logLevel });
@@ -14,7 +14,7 @@ const redisCache = config.redisUrl ? new RedisCache(config.redisUrl, log) : unde
 const cache: Cache = redisCache ?? new MemoryCache();
 if (!redisCache) log.info("REDIS_URL not set; using an in-process cache");
 
-let listener: NewsListener | undefined;
+let updates: UpdateSource | undefined;
 
 const { app, hub } = await buildApp(
   {
@@ -24,7 +24,9 @@ const { app, hub } = await buildApp(
     rateLimitRedis: redisCache?.client,
     rateLimitMax: config.rateLimitMax,
     originVerifySecret: config.originVerifySecret,
-    liveStatus: () => listener?.connected ?? false,
+    liveStatus: () => updates?.connected ?? false,
+    wsMaxSeconds: config.wsMaxSeconds,
+    wsAllowedOrigins: config.wsAllowedOrigins,
   },
   {
     loggerInstance: log,
@@ -35,21 +37,20 @@ const { app, hub } = await buildApp(
   },
 );
 
-if (config.databaseUrlDirect) {
-  listener = new NewsListener(
-    config.databaseUrlDirect,
-    (date) => handleNewsUpdated(date, cache, hub),
-    log,
-  );
-  await listener.start();
+const onUpdate = (date: string) => handleNewsUpdated(date, cache, hub);
+if (config.liveUpdates === "redis" && config.redisUrl) {
+  updates = new RedisNewsSubscriber(config.redisUrl, onUpdate, log);
+} else if (config.liveUpdates === "postgres" && config.databaseUrlDirect) {
+  updates = new NewsListener(config.databaseUrlDirect, onUpdate, log);
 } else {
-  log.warn("DATABASE_URL_DIRECT not set; live updates disabled");
+  log.warn({ liveUpdates: config.liveUpdates }, "live updates disabled (or missing REDIS_URL / DATABASE_URL_DIRECT)");
 }
+await updates?.start();
 
 const shutdown = async (signal: string) => {
   log.info({ signal }, "shutting down");
   await app.close();
-  await listener?.stop();
+  await updates?.stop();
   await cache.close();
   await repo.close();
   process.exit(0);

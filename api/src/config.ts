@@ -10,6 +10,17 @@ export interface Config {
    */
   databaseUrlDirect: string | undefined;
   redisUrl: string | undefined;
+  /**
+   * Where live updates come from: "redis" (pub/sub; production on GCP with
+   * Upstash), "postgres" (LISTEN on DATABASE_URL_DIRECT; the AWS stack, whose
+   * Redis is private to the VPC) or "off". Defaults to postgres when
+   * DATABASE_URL_DIRECT is set, else redis when REDIS_URL is set, else off.
+   */
+  liveUpdates: "redis" | "postgres" | "off";
+  /** Close each WebSocket after this long (0 = never); browsers reconnect while the tab is visible. */
+  wsMaxSeconds: number;
+  /** Allowed Origin headers for /ws; unset allows any. Browsers connect cross-origin when the site and API are on different hosts. */
+  wsAllowedOrigins: string[] | undefined;
   voyageApiKey: string | undefined;
   /** Requests per minute per client IP. */
   rateLimitMax: number;
@@ -37,16 +48,30 @@ function optional(name: string): string | undefined {
   return value && value !== "unset" ? value : undefined;
 }
 
+function liveUpdates(databaseUrlDirect: string | undefined, redisUrl: string | undefined): Config["liveUpdates"] {
+  const raw = optional("LIVE_UPDATES");
+  if (raw === "redis" || raw === "postgres" || raw === "off") return raw;
+  if (raw) throw new Error(`LIVE_UPDATES must be redis, postgres or off, got "${raw}"`);
+  if (databaseUrlDirect) return "postgres";
+  return redisUrl ? "redis" : "off";
+}
+
 export function loadConfig(): Config {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL is required");
+  const databaseUrlDirect = optional("DATABASE_URL_DIRECT");
+  const redisUrl = optional("REDIS_URL");
+  const origins = optional("WS_ALLOWED_ORIGINS");
 
   return {
     port: int("PORT", 8080),
     host: process.env.HOST ?? "0.0.0.0",
     databaseUrl,
-    databaseUrlDirect: optional("DATABASE_URL_DIRECT"),
-    redisUrl: optional("REDIS_URL"),
+    databaseUrlDirect,
+    redisUrl,
+    liveUpdates: liveUpdates(databaseUrlDirect, redisUrl),
+    wsMaxSeconds: int("WS_MAX_SECONDS", 0),
+    wsAllowedOrigins: origins?.split(",").map((o) => o.trim().replace(/\/$/, "")).filter(Boolean),
     voyageApiKey: optional("VOYAGE_API_KEY"),
     rateLimitMax: int("RATE_LIMIT_MAX", 300),
     originVerifySecret: optional("ORIGIN_VERIFY_SECRET"),

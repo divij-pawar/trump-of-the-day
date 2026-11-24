@@ -1,5 +1,7 @@
-# Local stack for development and load testing: Postgres with pgvector, Redis,
-# and the API, seeded with synthetic news. The frontend runs separately with
+# Local stack for development and load testing, shaped like production: Postgres
+# with pgvector (seeded with synthetic news), Redis, an Upstash-compatible REST
+# endpoint in front of that Redis (what the pipeline uses to announce updates),
+# and the API with Redis pub/sub live updates. The frontend runs separately with
 # `npm run dev` (its Vite proxy points at the API on :8080).
 #
 #   docker compose up --build
@@ -33,12 +35,29 @@ services:
       interval: 5s
       retries: 20
 
+  # Upstash's REST API, locally: the pipeline announces with
+  #   UPSTASH_REDIS_REST_URL=http://127.0.0.1:8079 UPSTASH_REDIS_REST_TOKEN=local-token
+  redis-rest:
+    image: hiett/serverless-redis-http:0.0.10
+    environment:
+      SRH_MODE: env
+      SRH_TOKEN: local-token
+      SRH_CONNECTION_STRING: redis://redis:6379
+    ports: ["8079:80"]
+    depends_on:
+      redis: { condition: service_healthy }
+
   api:
     build: ./api
     environment:
       DATABASE_URL: postgres://news_readonly:readonly@postgres:5432/news
-      DATABASE_URL_DIRECT: postgres://news_readonly:readonly@postgres:5432/news
       REDIS_URL: redis://redis:6379
+      # As on Cloud Run: the pipeline PUBLISHes, the API subscribes. For the AWS
+      # stack's Postgres LISTEN path instead, set LIVE_UPDATES=postgres and
+      # DATABASE_URL_DIRECT=postgres://news_readonly:readonly@postgres:5432/news
+      LIVE_UPDATES: redis
+      WS_MAX_SECONDS: "600"
+      WS_ALLOWED_ORIGINS: ${WS_ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
       # The load test drives everything from one IP.
       RATE_LIMIT_MAX: "1000000"
       VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}

@@ -18,8 +18,12 @@ export interface AppDeps {
   originVerifySecret?: string;
   /** Overridable clock so cache-TTL decisions are testable. */
   now?: () => Date;
-  /** Reports whether the Postgres LISTEN connection is up, for /readyz. */
+  /** Reports whether the live-update source (Redis pub/sub or Postgres LISTEN) is connected, for /readyz. */
   liveStatus?: () => boolean;
+  /** Close WebSockets after this many seconds (0 or unset = never). */
+  wsMaxSeconds?: number;
+  /** Origins allowed to open /ws; unset allows any. */
+  wsAllowedOrigins?: string[];
 }
 
 export const NEWS_PAGE_LIMIT = 100;
@@ -55,7 +59,7 @@ export async function buildApp(
 ): Promise<{ app: FastifyInstance; hub: LiveHub }> {
   const app = Fastify(opts);
   const now = deps.now ?? (() => new Date());
-  const hub = new LiveHub(app.log);
+  const hub = new LiveHub(app.log, (deps.wsMaxSeconds ?? 0) * 1_000);
 
   app.setErrorHandler((err: Error & { statusCode?: number; validation?: unknown }, req, reply) => {
     if (err.validation) {
@@ -191,14 +195,29 @@ export async function buildApp(
     },
   );
 
-  app.get("/ws", { websocket: true }, (socket) => hub.add(socket));
+  // Browsers connect to /ws cross-origin (the site's host has no WebSocket proxy),
+  // so check Origin: browsers always send it, and it stops other sites' pages from
+  // holding connections open on this API's bill.
+  const allowedOrigins = deps.wsAllowedOrigins && new Set(deps.wsAllowedOrigins);
+  app.get(
+    "/ws",
+    {
+      websocket: true,
+      preValidation: async (req, reply) => {
+        if (allowedOrigins && !allowedOrigins.has(req.headers.origin ?? "")) {
+          return reply.status(403).send({ error: "forbidden_origin" });
+        }
+      },
+    },
+    (socket) => hub.add(socket),
+  );
 
   app.addHook("onClose", async () => hub.close());
 
   return { app, hub };
 }
 
-/** Called for each pipeline NOTIFY: drop stale cache entries, then tell connected browsers. */
+/** Called for each pipeline update (Redis message or Postgres NOTIFY): drop stale cache entries, then tell connected browsers. */
 export async function handleNewsUpdated(date: string, cache: Cache, hub: LiveHub): Promise<void> {
   await cache.del(cacheKeys.news(date), cacheKeys.latestDate());
   hub.broadcast({ type: "news_updated", date });

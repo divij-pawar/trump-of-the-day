@@ -8,6 +8,9 @@ export type ServerMessage =
 
 const HEARTBEAT_MS = 30_000;
 
+/** Close code for a connection that reached its maximum lifetime; clients reconnect. */
+export const MAX_LIFETIME_CLOSE_CODE = 4000;
+
 /**
  * Tracks this replica's WebSocket clients. Pings every 30s both to drop dead
  * connections and to keep the ALB/CloudFront idle timeouts from closing quiet ones.
@@ -17,7 +20,15 @@ export class LiveHub {
   private readonly alive = new WeakMap<WebSocket, boolean>();
   private readonly heartbeat: NodeJS.Timeout;
 
-  constructor(private readonly log: FastifyBaseLogger) {
+  /**
+   * @param maxLifetimeMs close each connection after this long (0 = never). On
+   *   Cloud Run an open WebSocket is an in-flight request, billed for as long as
+   *   it lasts, so production caps it and lets visible tabs reconnect.
+   */
+  constructor(
+    private readonly log: FastifyBaseLogger,
+    private readonly maxLifetimeMs = 0,
+  ) {
     this.heartbeat = setInterval(() => this.sweep(), HEARTBEAT_MS);
     this.heartbeat.unref();
   }
@@ -30,7 +41,19 @@ export class LiveHub {
     this.clients.add(socket);
     this.alive.set(socket, true);
     socket.on("pong", () => this.alive.set(socket, true));
-    socket.on("close", () => this.clients.delete(socket));
+    const lifetime =
+      this.maxLifetimeMs > 0
+        ? setTimeout(() => {
+            socket.close(MAX_LIFETIME_CLOSE_CODE, "max lifetime reached");
+            // Stop counting it now rather than after the close handshake completes.
+            this.clients.delete(socket);
+          }, this.maxLifetimeMs)
+        : undefined;
+    lifetime?.unref();
+    socket.on("close", () => {
+      clearTimeout(lifetime);
+      this.clients.delete(socket);
+    });
     socket.on("error", (err) => this.log.debug({ err }, "websocket error"));
     socket.on("message", (raw) => {
       // The only client message is an application-level ping, used by the load
