@@ -32,10 +32,10 @@ One day's stories, best relevance first (at most 100), plus that day's brief if 
 `{"date": "2025-03-01"}`: the newest date with any stories (`null` on an empty database). The frontend opens on this day.
 
 ### `GET /api/news/:id/similar`
-Up to 5 nearest stories to `:id` across all dates, by cosine distance between embeddings: `{"id": 812, "items": [{...story, "distance": 0.12}]}`. Empty `items` if the story has no embedding yet; `404` if the id doesn't exist.
+Up to 5 nearest stories to `:id` across all dates, by cosine distance between embeddings: `{"id": 812, "items": [{...story, "distance": 0.12}]}`. Empty `items` if the story has no embedding (only each day's top 50 stories by relevance are embedded, so lower-ranked stories have none); `404` if the id doesn't exist.
 
 ### `GET /api/search?q=...&limit=10`
-Semantic search across the archive. `q` is 2 to 200 characters and is lowercased and trimmed; `limit` is 1 to 20. The query is embedded with Voyage (`voyage-3.5`, `input_type: query`) and matched against stored document embeddings. Returns `{"q": "...", "items": [...]}` like `/similar`. `503 search_disabled` if `VOYAGE_API_KEY` isn't configured.
+Semantic search across the archive. `q` is 2 to 200 characters and is lowercased and trimmed; `limit` is 1 to 20. The query is embedded with Voyage (`voyage-3.5`, `input_type: query`) and matched against stored document embeddings, which exist for each day's top 50 stories by relevance. Returns `{"q": "...", "items": [...]}` like `/similar`. `503 search_disabled` if `VOYAGE_API_KEY` isn't configured.
 
 ### `GET /healthz`
 Liveness: `{"status":"ok"}` whenever the process is serving. It has no dependencies, so a database outage doesn't make ECS restart healthy tasks. Used by the container `HEALTHCHECK`.

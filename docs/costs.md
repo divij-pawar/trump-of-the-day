@@ -15,7 +15,7 @@ Estimates as of 2026-11. Free tiers and prices change, so check each provider's 
 | Monitoring | Cloud Monitoring / Logging | Uptime check, alert, logs | Basic uptime checks; 50 GB logs/month | | $0 |
 | CI/CD and daily scraper | GitHub Actions | Tests, deploys, 14:00 UTC cron | Free for public repos; 2,000 min/month for private ones | ~5 min/day plus CI | $0 |
 | Daily brief | OpenRouter Free Router (`openrouter/free`) | One to three requests per brief (retries when a model runs out of tokens); the site shows which free model wrote it | Free models are rate-limited per day (about 50 requests without credits); a daily job needs at most 6 (yesterday and today) | | $0 |
-| Embeddings | Voyage `voyage-3.5` | Search and related coverage | Large free token allowance for new accounts | ~1M tokens/month (~$0.06 if paid) | ~$0 |
+| Embeddings | Voyage `voyage-3.5` | Search and related coverage, for each day's top 50 stories | Voyage's pricing page lists `voyage-3.5` with no free tokens ($0.06 per million) | ~70K tokens/month (under a cent); embedding a whole archive once costs a few cents at most | ~$0 |
 | Domain | Netlify `*.netlify.app` | | | | $0 (a custom domain is ~$10–12/year) |
 
 **Worst case.** Cloud Run can't run more than `max_instances` (2) instances. If a bot kept both fully busy all month, compute would come to tens of dollars. The budget alert emails you well before that.

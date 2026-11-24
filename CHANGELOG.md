@@ -39,7 +39,7 @@ All notable changes to the site, API and infrastructure. The pipeline keeps its 
 - `optional()` config parsing in the API: an empty value or the literal `unset` (GCP's placeholder secret) means "not configured".
 - Redis caching with date-aware TTLs, single-flight loading for concurrent misses, and invalidation driven by the pipeline's Postgres `NOTIFY`.
 - Daily brief card at the top of each day, with its top stories highlighted. It's written in the pipeline by a free model picked by OpenRouter's Free Router (`openrouter/free`), or by Claude. The card credits the model that wrote it ("Summarized by `upstage/solar-pro-3` (free model via OpenRouter)").
-- Semantic search across the archive, and "Related coverage" under each story (pgvector, Voyage embeddings).
+- Semantic search across the archive, and "Related coverage" under each story (pgvector, Voyage embeddings). The pipeline embeds each day's top 50 stories by relevance (`EMBED_TOP_PER_DAY`), because the vector and its HNSW index entry take about 12 KB per story, most of the database, which was growing by about 2 MB a day at the current volume. Lower-ranked stories stay in the feed; their "Related coverage" shows "No related coverage yet" and they don't appear in search.
 - Live updates: open pages refetch when the pipeline publishes the day they're showing.
 - Terraform for AWS in `infra/terraform/`: VPC, ECS Fargate with autoscaling and circuit-breaker rollback, ALB, ElastiCache Redis, private S3 with CloudFront, Secrets Manager, least-privilege IAM with a GitHub OIDC deploy role, and CloudWatch alarms. See [docs/infrastructure.md](docs/infrastructure.md).
 - GitHub Actions:
